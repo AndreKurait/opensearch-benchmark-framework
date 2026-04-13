@@ -1,0 +1,50 @@
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+tfplan
+.terraform.lock.hcl
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+
+# Results (keep directory via .gitkeep)
+results/*.csv
+results/*.log
+results/*.json
+!results/.gitkeep
+
+# Generated k8s manifests
+k8s/generated/
+
+# Secrets
+*.pem
+*.key
+.env
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Node
+node_modules/
+dist/
+build/
+.terraform
+# Results (CSV/log files are large, only commit REPORT.md)
+results/**/*.csv
+results/**/*.log
+!results/REPORT.md
+!results/.gitkeep

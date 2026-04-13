@@ -1,0 +1,111 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  secrets-scan:
+    name: Secrets & Credentials Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Scan for AWS account IDs
+        run: |
+          echo "Scanning for AWS account IDs (12-digit numbers in suspicious contexts)..."
+          if grep -rn '[0-9]\{12\}\.dkr\.ecr\.' --include="*.py" --include="*.tf" --include="*.sh" --include="*.yaml" --include="*.yml" --include="*.json" --include="*.md" . | grep -v '.git/'; then
+            echo "::error::Found AWS account ID in ECR URI"
+            exit 1
+          fi
+
+      - name: Scan for AWS resource IDs
+        run: |
+          echo "Scanning for VPC/subnet/SG/ENI IDs..."
+          PATTERNS='vpc-[0-9a-f]{8,17}|subnet-[0-9a-f]{8,17}|sg-[0-9a-f]{8,17}|eni-[0-9a-f]{8,17}|vol-[0-9a-f]{8,17}|igw-[0-9a-f]{8,17}|rtb-[0-9a-f]{8,17}|acl-[0-9a-f]{8,17}|i-[0-9a-f]{8,17}'
+          if grep -rPn "$PATTERNS" --include="*.py" --include="*.tf" --include="*.sh" --include="*.yaml" --include="*.yml" --include="*.json" --include="*.md" . | grep -v '.git/' | grep -v 'example\|placeholder\|dummy'; then
+            echo "::error::Found AWS resource IDs"
+            exit 1
+          fi
+
+      - name: Scan for AWS ARNs
+        run: |
+          if grep -rn 'arn:aws:[a-z]*:[a-z0-9-]*:[0-9]\{12\}' --include="*.py" --include="*.tf" --include="*.sh" --include="*.yaml" --include="*.yml" --include="*.json" --include="*.md" . | grep -v '.git/'; then
+            echo "::error::Found AWS ARN with account ID"
+            exit 1
+          fi
+
+      - name: Scan for access keys
+        run: |
+          if grep -rPn '(AKIA|ASIA)[A-Z0-9]{16}' --include="*.py" --include="*.tf" --include="*.sh" --include="*.yaml" --include="*.yml" --include="*.json" . | grep -v '.git/'; then
+            echo "::error::Found AWS access key"
+            exit 1
+          fi
+
+      - name: Scan for private keys and secrets
+        run: |
+          if grep -rn 'BEGIN.*PRIVATE KEY\|BEGIN.*RSA\|aws_secret_access_key\|password\s*=' --include="*.py" --include="*.tf" --include="*.sh" --include="*.yaml" --include="*.yml" --include="*.json" . | grep -v '.git/' | grep -v 'example\|placeholder\|dummy\|\.gitignore'; then
+            echo "::error::Found private key or secret"
+            exit 1
+          fi
+
+      - name: Scan for hardcoded IPs (non-CIDR)
+        run: |
+          if grep -rPn '\b(?:10|172|192)\.\d+\.\d+\.\d+\b' --include="*.py" --include="*.tf" --include="*.sh" --include="*.yaml" --include="*.yml" --include="*.json" . | grep -v '.git/' | grep -v '/16\|/24\|/20\|/8\|cidr\|CIDR\|0\.0\.0\.0\|localhost\|127\.0\.0\.1'; then
+            echo "::error::Found hardcoded private IP address"
+            exit 1
+          fi
+
+  lint-validate:
+    name: Lint & Validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install pyyaml
+
+      - name: Python syntax check
+        run: python -m py_compile scripts/generate.py && python -m py_compile scripts/report.py
+
+      - name: Generate manifests (dry run)
+        run: python scripts/generate.py
+
+      - name: Verify generated files exist
+        run: |
+          test -f k8s/generated/config.json
+          test -f k8s/generated/storageclasses.yaml
+          test -f k8s/generated/nodepools.yaml
+          test -f k8s/generated/rbac.yaml
+          test -f k8s/generated/osb-jobs-geonames.yaml
+          test -f k8s/generated/osb-jobs-pmc.yaml
+          ls k8s/generated/opensearch/values-*.yaml | wc -l | grep -q 18
+          echo "All 18 permutations generated"
+
+      - name: Verify no secrets in generated files
+        run: |
+          if grep -rn '[0-9]\{12\}\.dkr\.ecr\.\|AKIA\|ASIA\|aws_secret' k8s/generated/; then
+            echo "::error::Secrets found in generated manifests"
+            exit 1
+          fi
+
+      - name: Shell script lint
+        run: |
+          for f in scripts/*.sh; do
+            bash -n "$f" && echo "✓ $f" || exit 1
+          done
+
+      - uses: hashicorp/setup-terraform@v3
+      - name: Terraform validate
+        run: |
+          cd terraform
+          terraform init -backend=false
+          terraform validate

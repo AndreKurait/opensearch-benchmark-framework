@@ -1,0 +1,4 @@
+# Copy to terraform.tfvars and customize
+region       = "us-east-1"
+cluster_name = "osb-bench"
+vpc_cidr     = "10.0.0.0/16"
