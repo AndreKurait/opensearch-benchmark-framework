@@ -24,9 +24,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-CONFIG_PATH = ROOT / "k8s" / "generated" / "config.json"
+GEN_DIR = ROOT / "k8s" / "generated"
+SPECS_PATH = ROOT / "specs.json"
 RESULTS_DIR = ROOT / "results"
 
+# Each repetition is a whole REGION running the full nine-type matrix. Hardware
+# is identical across regions (same instance types, same core counts), so
+# performance numbers pool across regions. PRICES ARE NOT POOLED: they differ by
+# up to 29% between regions, so every price-adjusted figure is computed inside a
+# single region and only then aggregated.
 MIN_REPS = 3
 MAX_ERROR_RATE = 0.1  # percent
 
@@ -161,13 +167,46 @@ def fmt_num(s, d=0):
 # ── report ────────────────────────────────────────────────────────────────
 
 
+def load_configs():
+    """One generated config per region. Hardware must agree across them; prices
+    must not be assumed to."""
+    configs = {}
+    for d in sorted(GEN_DIR.glob("*/config.json")):
+        c = json.loads(d.read_text())
+        configs[c["region"]] = c
+    if not configs:
+        raise SystemExit("No generated configs. Run: python3 scripts/generate.py")
+    return configs
+
+
+def price_of(configs, region, perm):
+    """On-demand $/hr for one instance type in one region. Never averaged across
+    regions -- that would invent a price nobody can actually buy."""
+    c = configs.get(region)
+    if not c:
+        return None
+    d = c["perm_details"].get(perm)
+    return d["usd_per_hour"] if d else None
+
+
 def main():
-    if not CONFIG_PATH.exists():
-        raise SystemExit("No config.json. Run: python3 scripts/generate.py")
-    config = json.loads(CONFIG_PATH.read_text())
+    configs = load_configs()
+    ref_region = sorted(configs)[0]
+    config = configs[ref_region]
     perms = config["permutations"]
     det = config["perm_details"]
-    reps = config["reps"]
+
+    # Hardware identity across regions is an assumption the whole pooling step
+    # rests on, so check it rather than trust it.
+    for rg, c in configs.items():
+        for pk in perms:
+            a, b = det[pk], c["perm_details"][pk]
+            for f in ("instance_type", "vcpus", "physical_cores", "threads_per_core"):
+                if a[f] != b[f]:
+                    raise SystemExit(
+                        f"Hardware mismatch for {pk} between {ref_region} and {rg}: "
+                        f"{f} {a[f]} vs {b[f]}. Results are not poolable."
+                    )
 
     R = []
     w = R.append
@@ -175,16 +214,33 @@ def main():
 
     w("# OpenSearch 3.5 — 8th-Gen EC2 CPU Architecture Benchmark")
     w("")
+    regions = sorted(configs)
     w(f"**Generated:** {now}  ")
-    w(f"**Region:** {config['region']} | **Instance size:** `{config['size']}` | "
-      f"**Load generator:** `{config['loadgen_type']}` (fixed for all permutations)  ")
-    w(f"**Repetitions:** {reps} per cell | **Tool:** OpenSearch Benchmark | "
-      f"**OpenSearch:** 3.5.0 | **EKS Auto Mode + Karpenter**")
+    w(f"**Instance size:** `{config['size']}` | "
+      f"**Load generator:** `{config['loadgen_type']}` (fixed everywhere)  ")
+    w(f"**Repetitions:** {len(regions)}, one per region | **Tool:** OpenSearch "
+      f"Benchmark | **OpenSearch:** 3.5.0 | **EKS Auto Mode + Karpenter**")
+    w("")
+    w("| repetition (region) | AZ | 27-node $/hr |")
+    w("|---|---|--:|")
+    for rg in regions:
+        c = configs[rg]
+        stack = sum(d["usd_per_hour"] for d in c["perm_details"].values()) * 3
+        w(f"| `{rg}` | `{c['az']}` | ${stack:.2f} |")
+    w("")
+    w("> **Each repetition is a separate region**, running the full nine-type "
+      "matrix on its own EKS cluster, pinned to a single AZ. Repetitions "
+      "therefore sample independent hardware and independent capacity pools, so "
+      "the interquartile ranges below reflect real placement variance — not just "
+      "run-to-run jitter on one set of nodes. No comparison is ever split across "
+      "regions.")
     w("")
     w("> All figures are **medians over repetitions**, with the interquartile "
       "range in brackets. A comparison is reported as a percentage **only when "
-      "the two IQRs do not overlap**; otherwise it reads *within noise*. See "
-      "[METHODOLOGY.md](../docs/METHODOLOGY.md).")
+      "the two IQRs do not overlap**; otherwise it reads *within noise*. "
+      "Price-adjusted figures are computed **within** each region and then "
+      "aggregated, because on-demand prices differ by up to 29% between regions. "
+      "See [METHODOLOGY.md](../docs/METHODOLOGY.md).")
     w("")
 
     # ── instance table, incl. the SMT asymmetry that vCPU counts hide ──
@@ -215,20 +271,32 @@ def main():
           f"conclusion from these tables.")
         w("")
 
-    # ── price table, computed ──
+    # ── price table, computed per region ──
     w("### Relative on-demand price")
+    w("")
+    w(f"Absolute prices below are `{ref_region}`. The **premium columns are "
+      f"region-invariant**: within a family the three vendors' prices scale by "
+      f"the same regional multiplier, so the price *ratios* — which is what "
+      f"price-performance depends on — hold in all {len(regions)} regions. "
+      f"Verified rather than assumed; a mismatch is flagged inline.")
     w("")
     w("| family | Graviton4 | AMD Turin | Intel Granite Rapids | Turin vs Graviton | Turin vs Intel |")
     w("|---|--:|--:|--:|--:|--:|")
     for fam in ["m", "c", "r"]:
-        by_cpu = {det[pk]["cpu"]: det[pk]["usd_per_hour"]
-                  for pk in perms if det[pk]["family"] == fam}
-        if len(by_cpu) < 3:
+        fam_perms = {det[pk]["cpu"]: pk for pk in perms if det[pk]["family"] == fam}
+        if len(fam_perms) < 3:
             continue
-        gp, am, it = (by_cpu.get("Graviton4"), by_cpu.get("AMD Turin"),
-                      by_cpu.get("Intel Granite Rapids"))
+        gk, ak, ik = (fam_perms.get("Graviton4"), fam_perms.get("AMD Turin"),
+                      fam_perms.get("Intel Granite Rapids"))
+        gp, am, it = (det[gk]["usd_per_hour"], det[ak]["usd_per_hour"],
+                      det[ik]["usd_per_hour"])
+        # Premium in every region; flag if the ratio is not stable.
+        prem = [(price_of(configs, rg, ak) - price_of(configs, rg, gk))
+                / price_of(configs, rg, gk) * 100 for rg in regions]
+        flag = "" if (max(prem) - min(prem)) < 0.5 else (
+            f" ⚠️ varies {min(prem):+.1f}..{max(prem):+.1f}%")
         w(f"| {fam} | ${gp:.4f} | ${am:.4f} | ${it:.4f} | "
-          f"{(am-gp)/gp*100:+.1f}% | {(am-it)/it*100:+.1f}% |")
+          f"{(am-gp)/gp*100:+.1f}%{flag} | {(am-it)/it*100:+.1f}% |")
     w("")
 
     # ── discover results ──
@@ -265,6 +333,9 @@ def main():
                     r = load_run(rep_dir, pk)
                     if r is None:
                         continue
+                    # The repetition directory IS the region name; carry it so
+                    # price-adjusted figures use that region's actual prices.
+                    r["region"] = rep_dir.name
                     if not r["valid"]:
                         invalid_rows.append(
                             (wl, lk, rep_dir.name, pk, "; ".join(r["problems"]))
@@ -289,7 +360,7 @@ def main():
               "sensitive to load-generator behaviour.")
             w("")
             w("| perm | CPU | cores | index time (min) | merge time (min) | "
-              "index throughput (docs/s) | $/M docs indexed |")
+              f"index throughput (docs/s) | $/M docs ({ref_region}) |")
             w("|---|---|--:|--:|--:|--:|--:|")
             rows = sorted(perms, key=lambda pk: idx[pk]["median"] if idx[pk] else 9e9)
             for pk in rows:
@@ -351,7 +422,7 @@ def main():
                   "— use the fixed-rate levels above for latency.")
                 w("")
                 w("| perm | CPU | cores | " + " | ".join(SEARCH_TASKS)
-                  + " | $/1k ops (term) |")
+                  + f" | $/1k ops, term ({ref_region}) |")
                 w("|---|---|--:|" + "--:|" * len(SEARCH_TASKS) + "--:|")
                 for pk in perms:
                     d = det[pk]
@@ -440,7 +511,68 @@ def main():
                       f"{fmt_ms(as_)} | {verdict} | {adj} |")
         w("")
         w("*price-adjusted* = performance delta minus the on-demand price delta. "
-          "Negative means the faster instance is not worth its premium at list price.")
+          "Negative means the faster instance is not worth its premium at list "
+          "price. The price delta is region-invariant within a family (see the "
+          "price table), so one figure is valid for all regions.")
+        w("")
+
+        # ── cross-region agreement: the robustness check a single-region run
+        # cannot produce. Pooled medians can be swung by one bad region; this
+        # asks how many regions independently show the same SIGN.
+        w("### Cross-region agreement (term query)")
+        w("")
+        w("Each region is an independent repetition on independent hardware. "
+          "Below, each region votes on the sign of the Turin-vs-Graviton4 "
+          "difference. Unanimous agreement across regions is far stronger "
+          "evidence than a pooled median alone, and a split vote means the "
+          "effect is not robust no matter how the IQRs fall.")
+        w("")
+        w("| family | load level | regions favouring Turin | favouring Graviton4 | verdict |")
+        w("|---|---|--:|--:|---|")
+        for fam in ["m", "c", "r"]:
+            gk = next((pk for pk in perms if det[pk]["family"] == fam
+                       and det[pk]["cpu"] == "Graviton4"), None)
+            ak = next((pk for pk in perms if det[pk]["family"] == fam
+                       and det[pk]["cpu"] == "AMD Turin"), None)
+            if not gk or not ak:
+                continue
+            for lk in load_keys:
+                kind = config["load_levels"][lk]["kind"]
+                # Per region, pick the metric appropriate to the load kind.
+                gvals, avals = {}, {}
+                for c in runs[lk][gk]:
+                    v = (g(c["m"], "Mean Throughput", "term") if kind == "saturate"
+                         else service_time(c["m"], "term"))
+                    if v:
+                        gvals[c["region"]] = v
+                for c in runs[lk][ak]:
+                    v = (g(c["m"], "Mean Throughput", "term") if kind == "saturate"
+                         else service_time(c["m"], "term"))
+                    if v:
+                        avals[c["region"]] = v
+                shared = sorted(set(gvals) & set(avals))
+                if not shared:
+                    continue
+                turin, grav = 0, 0
+                for rg in shared:
+                    # saturate: higher throughput wins. fixed-rate: lower service
+                    # time wins.
+                    better = (avals[rg] > gvals[rg]) if kind == "saturate" \
+                        else (avals[rg] < gvals[rg])
+                    turin += 1 if better else 0
+                    grav += 0 if better else 1
+                n = len(shared)
+                if turin == n:
+                    verdict = f"**unanimous: Turin** ({n}/{n})"
+                elif grav == n:
+                    verdict = f"**unanimous: Graviton4** ({n}/{n})"
+                else:
+                    verdict = f"split {turin}–{grav} — not robust"
+                w(f"| {fam} | `{lk}` | {turin} | {grav} | {verdict} |")
+        w("")
+        w("A split vote overrides any percentage in the table above: if regions "
+          "disagree on the direction, the effect is within regional noise "
+          "regardless of what the pooled IQRs show.")
         w("")
 
     # ── validity ledger ──

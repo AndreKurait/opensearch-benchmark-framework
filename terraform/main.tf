@@ -26,7 +26,14 @@ data "aws_availability_zones" "available" {
 }
 
 locals {
-  azs = slice(data.aws_availability_zones.available.names, 0, 3)
+  # EKS requires subnets in >= 2 AZs, but the benchmark only ever schedules into
+  # var.bench_az. Put that AZ first and guarantee it is present, rather than
+  # hoping it falls inside the first three names the API happens to return.
+  default_azs = slice(data.aws_availability_zones.available.names, 0, 3)
+  azs = var.bench_az == "" ? local.default_azs : distinct(concat(
+    [var.bench_az],
+    slice(data.aws_availability_zones.available.names, 0, 2),
+  ))
 }
 
 ################################################################################

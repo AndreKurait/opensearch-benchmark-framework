@@ -1,21 +1,26 @@
 #!/usr/bin/env bash
 # Deploy one 3-node OpenSearch cluster per instance type, plus the shared,
 # architecture-fixed load-generator node pool.
+#
+# Expects KUBECONFIG to already point at this region's cluster.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-CONFIG="k8s/generated/config.json"
-[[ -f "$CONFIG" ]] || { echo "Run: python3 scripts/generate.py"; exit 1; }
+REGION="${BENCH_REGION:?BENCH_REGION must be set}"
+GEN="k8s/generated/${REGION}"
+CONFIG="${GEN}/config.json"
+[[ -f "$CONFIG" ]] || { echo "Run: BENCH_REGION=$REGION python3 scripts/generate.py"; exit 1; }
 
 PERMS=$(jq -r '.permutations[]' "$CONFIG")
 COUNT=$(echo "$PERMS" | wc -l | tr -d ' ')
 LOADGEN=$(jq -r '.loadgen_type' "$CONFIG")
+AZ=$(jq -r '.az' "$CONFIG")
 
-echo "==> Deploying $COUNT OpenSearch clusters (load generator: $LOADGEN)"
+echo "==> [$REGION/$AZ] deploying $COUNT OpenSearch clusters (load generator: $LOADGEN)"
 
-kubectl apply -f k8s/generated/storageclass.yaml
-kubectl apply -f k8s/generated/rbac.yaml
-kubectl apply -f k8s/generated/nodepools.yaml
+kubectl apply -f "${GEN}/storageclass.yaml"
+kubectl apply -f "${GEN}/rbac.yaml"
+kubectl apply -f "${GEN}/nodepools.yaml"
 
 helm repo add opensearch https://opensearch-project.github.io/helm-charts/ >/dev/null 2>&1 || true
 helm repo update opensearch 2>&1 | tail -1
@@ -24,11 +29,11 @@ for pk in $PERMS; do
   kubectl create namespace "os-${pk}" >/dev/null 2>&1 || true
   helm upgrade --install opensearch opensearch/opensearch \
     -n "os-${pk}" --version 3.5.0 \
-    -f "k8s/generated/opensearch/values-${pk}.yaml" \
+    -f "${GEN}/opensearch/values-${pk}.yaml" \
     --wait=false >/dev/null &
 done
 wait
-echo "==> Helm installs submitted; Karpenter is provisioning nodes"
+echo "==> [$REGION] helm installs submitted; Karpenter is provisioning nodes"
 
 # Pre-warm the load-generator pool so the first benchmark cell is not waiting on
 # a cold node launch (and so a provisioning failure surfaces now, not in an hour).
@@ -59,7 +64,7 @@ spec:
             requests: {cpu: "24", memory: "8Gi"}
 EOF
 
-echo "==> Waiting for $((COUNT * 3)) OpenSearch pods (this provisions $((COUNT * 3)) nodes)"
+echo "==> [$REGION] waiting for $((COUNT * 3)) OpenSearch pods (this provisions $((COUNT * 3)) nodes)"
 TARGET=$((COUNT * 3))
 DEADLINE=$(( $(date +%s) + 2400 ))
 while true; do
@@ -70,17 +75,17 @@ while true; do
     ready=$((ready + n))
   done
   lg=$(kubectl get nodes -l bench/role=loadgen --no-headers 2>/dev/null | wc -l | tr -d ' ')
-  echo "  [$(date -u '+%H:%M:%S')] opensearch pods ready: $ready/$TARGET | loadgen nodes: $lg"
+  echo "  [$REGION $(date -u '+%H:%M:%S')] opensearch pods ready: $ready/$TARGET | loadgen nodes: $lg"
   [[ "$ready" -ge "$TARGET" ]] && break
   if (( $(date +%s) > DEADLINE )); then
-    echo "  !! timed out waiting for pods; showing pending pods:"
+    echo "  !! [$REGION] timed out waiting for pods; showing pending pods:"
     kubectl get pods -A --field-selector=status.phase=Pending --no-headers 2>/dev/null | head -20
     exit 1
   fi
   sleep 30
 done
 
-echo "==> Waiting for cluster health on each permutation"
+echo "==> [$REGION] waiting for cluster health on each permutation"
 for pk in $PERMS; do
   for _ in $(seq 1 60); do
     s=$(kubectl exec -n "os-${pk}" "${pk}-master-0" -- \
@@ -92,4 +97,4 @@ for pk in $PERMS; do
   echo "  $pk: ${s:-unknown}"
 done
 
-echo "==> Deploy complete"
+echo "==> [$REGION] deploy complete"

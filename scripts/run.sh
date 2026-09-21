@@ -1,23 +1,34 @@
 #!/usr/bin/env bash
-# Run one workload across every load level and repetition.
+# Run one workload across every load level, for ONE region.
 #
-# Indices are dropped between every repetition, so a cell's repetitions are not
-# silently measuring a progressively warmer cache. Each (load, rep) cell is
-# checkpointed, so an interrupted run resumes instead of restarting.
+# The repetition index is the region: this script performs a single pass over the
+# matrix, and the caller (run-multiregion.sh) runs seven of these concurrently,
+# one per region. Repetitions therefore land on independent node sets in
+# independent capacity pools, which is what makes the interquartile ranges in the
+# report reflect real placement variance rather than just run-to-run jitter.
+#
+# Indices are dropped between load levels so a later level is not silently
+# measuring a progressively warmer cache. Each cell is checkpointed, so an
+# interrupted run resumes instead of restarting.
+#
+# Expects KUBECONFIG to already point at this region's cluster.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-WORKLOAD="${1:?Usage: $0 <workload>}"
-CONFIG="k8s/generated/config.json"
-[[ -f "$CONFIG" ]] || { echo "Run: python3 scripts/generate.py"; exit 1; }
+WORKLOAD="${1:?Usage: BENCH_REGION=<region> $0 <workload>}"
+REGION="${BENCH_REGION:?BENCH_REGION must be set}"
+
+GEN="k8s/generated/${REGION}"
+CONFIG="${GEN}/config.json"
+[[ -f "$CONFIG" ]] || { echo "Run: BENCH_REGION=$REGION python3 scripts/generate.py"; exit 1; }
 
 PERMS=$(jq -r '.permutations[]' "$CONFIG")
 COUNT=$(echo "$PERMS" | wc -l | tr -d ' ')
-REPS=$(jq -r '.reps' "$CONFIG")
 LOADS=$(jq -r '.load_levels | keys_unsorted[]' "$CONFIG")
 NLOADS=$(echo "$LOADS" | wc -l | tr -d ' ')
+AZ=$(jq -r '.az' "$CONFIG")
 
-echo "==> Workload '$WORKLOAD': $COUNT permutations x $NLOADS load levels x $REPS reps"
+echo "==> [$REGION/$AZ] '$WORKLOAD': $COUNT permutations x $NLOADS load levels (rep=$REGION)"
 
 drop_indices() {
   for pk in $PERMS; do
@@ -29,48 +40,44 @@ drop_indices() {
 }
 
 for LOAD in $LOADS; do
-  for REP in $(seq 1 "$REPS"); do
-    JOBS_FILE="k8s/generated/jobs/${WORKLOAD}-${LOAD}-r${REP}.yaml"
-    [[ -f "$JOBS_FILE" ]] || { echo "  missing $JOBS_FILE, skipping"; continue; }
+  JOBS_FILE="${GEN}/jobs/${WORKLOAD}-${LOAD}.yaml"
+  [[ -f "$JOBS_FILE" ]] || { echo "  missing $JOBS_FILE, skipping"; continue; }
 
-    if [[ -f "results/${WORKLOAD}/${LOAD}/r${REP}/.complete" ]]; then
-      echo "==> [$LOAD rep $REP] already complete, skipping"
-      continue
+  if [[ -f "results/${WORKLOAD}/${LOAD}/${REGION}/.complete" ]]; then
+    echo "==> [$REGION $LOAD] already complete, skipping"
+    continue
+  fi
+
+  echo "==> [$REGION $LOAD] dropping indices on all $COUNT clusters"
+  drop_indices
+
+  kubectl delete jobs -n default -l "workload=$WORKLOAD,load=$LOAD" \
+    --ignore-not-found >/dev/null 2>&1 || true
+  kubectl delete cm -n default -l "workload=$WORKLOAD,load=$LOAD" \
+    --ignore-not-found >/dev/null 2>&1 || true
+
+  echo "==> [$REGION $LOAD] launching $COUNT jobs"
+  kubectl apply -f "$JOBS_FILE" >/dev/null
+
+  DEADLINE=$(( $(date +%s) + 10800 ))   # 3h ceiling per cell
+  while true; do
+    cms=$(kubectl get cm -n default -l "workload=$WORKLOAD,load=$LOAD" \
+          --no-headers 2>/dev/null | wc -l | tr -d ' ')
+    failed=$(kubectl get jobs -n default -l "workload=$WORKLOAD,load=$LOAD" \
+          -o jsonpath='{range .items[*]}{.status.failed}{"\n"}{end}' 2>/dev/null \
+          | grep -c '^[1-9]' || true)
+    running=$(kubectl get pods -n default -l "workload=$WORKLOAD,load=$LOAD" \
+          --no-headers 2>/dev/null | grep -c Running || true)
+    echo "    [$REGION $(date -u '+%H:%M:%S')] results:$cms/$COUNT running:$running failed:$failed"
+    [[ "$cms" -ge "$COUNT" ]] && break
+    if (( $(date +%s) > DEADLINE )); then
+      echo "    !! [$REGION] deadline exceeded; collecting whatever landed"
+      break
     fi
-
-    echo "==> [$LOAD rep $REP] dropping indices on all $COUNT clusters"
-    drop_indices
-
-    kubectl delete jobs -n default -l "workload=$WORKLOAD,load=$LOAD,rep=$REP" \
-      --ignore-not-found >/dev/null 2>&1 || true
-    kubectl delete cm -n default -l "workload=$WORKLOAD,load=$LOAD,rep=$REP" \
-      --ignore-not-found >/dev/null 2>&1 || true
-
-    echo "==> [$LOAD rep $REP] launching $COUNT jobs"
-    kubectl apply -f "$JOBS_FILE" >/dev/null
-
-    DEADLINE=$(( $(date +%s) + 10800 ))   # 3h ceiling per cell
-    while true; do
-      cms=$(kubectl get cm -n default -l "workload=$WORKLOAD,load=$LOAD,rep=$REP" \
-            --no-headers 2>/dev/null | wc -l | tr -d ' ')
-      failed=$(kubectl get jobs -n default -l "workload=$WORKLOAD,load=$LOAD,rep=$REP" \
-            -o jsonpath='{range .items[*]}{.status.failed}{"\n"}{end}' 2>/dev/null \
-            | grep -c '^[1-9]' || true)
-      running=$(kubectl get pods -n default -l "workload=$WORKLOAD,load=$LOAD,rep=$REP" \
-            --no-headers 2>/dev/null | grep -c Running || true)
-      echo "    [$(date -u '+%H:%M:%S')] results:$cms/$COUNT running:$running failed:$failed"
-      [[ "$cms" -ge "$COUNT" ]] && break
-      if (( $(date +%s) > DEADLINE )); then
-        echo "    !! deadline exceeded; collecting whatever landed"
-        break
-      fi
-      sleep 60
-    done
-
-    bash scripts/collect.sh "$WORKLOAD" "$LOAD" "$REP"
+    sleep 60
   done
+
+  bash scripts/collect.sh "$WORKLOAD" "$LOAD"
 done
 
-echo "==> Generating report"
-python3 scripts/report.py
-echo "==> Done: results/REPORT.md"
+echo "==> [$REGION] all load levels done"

@@ -29,7 +29,19 @@ import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
 SPECS_PATH = ROOT / "specs.json"
-OUT = ROOT / "k8s" / "generated"
+
+# One region == one full REPETITION of the matrix, run concurrently with the
+# other regions. On-demand vCPU quota is per-region (~1152-1689 vCPU), and a
+# single 27-node stack already needs 864, so a region cannot hold two stacks.
+# Spreading repetitions across regions is therefore the only way to parallelise
+# without a quota increase -- and it samples host-placement variance properly,
+# which repetitions on the *same* nodes do not.
+#
+# Hard rule: a region always runs ALL nine instance types. Never split a
+# comparison across regions, or the architecture delta is confounded with the
+# regional hardware population. Region is a blocking factor, nothing more.
+REGION = os.environ.get("BENCH_REGION", "us-east-1")
+OUT = ROOT / "k8s" / "generated" / REGION
 
 # ── Permutation axes ──────────────────────────────────────────────────────
 
@@ -62,7 +74,11 @@ LOAD_LEVELS = {
 # (1250 MB/s EBS baseline). The old default/fast EBS axis was dead weight: the
 # "fast" tier asked for 1000 MB/s on a node with a 312.5 MB/s baseline, so it
 # was never realised and contributed only noise.
-EBS = {"throughput": 1000, "iops": 16000, "size": "500Gi", "type": "gp3"}
+# 200 GiB is ~15x the largest workload's on-disk footprint with room for merges
+# and translog. 500 GiB was oversized and, at 7 concurrent regions, would have
+# cost real money for empty blocks while pushing against the per-region gp3
+# storage quota. Throughput/IOPS are what matter here and they are unchanged.
+EBS = {"throughput": 1000, "iops": 16000, "size": "200Gi", "type": "gp3"}
 
 WORKLOADS = {
     "geonames": {
@@ -115,9 +131,27 @@ OSB_IMAGE = os.environ.get(
 
 
 def load_specs():
+    """Return the spec block for THIS region only. Prices differ by up to 29%
+    between regions, so a cross-region price table would silently produce
+    nonsense price-performance numbers."""
     if not SPECS_PATH.exists():
         raise SystemExit("No specs.json. Run: python3 scripts/fetch_specs.py")
-    return json.loads(SPECS_PATH.read_text())
+    payload = json.loads(SPECS_PATH.read_text())
+    if "regions" not in payload:
+        raise SystemExit(
+            "specs.json is in the old single-region format. Re-run: "
+            "python3 scripts/fetch_specs.py"
+        )
+    block = payload["regions"].get(REGION)
+    if block is None:
+        have = ", ".join(sorted(payload["regions"]))
+        raise SystemExit(f"No specs for region {REGION!r}. Have: {have}")
+    if not block.get("usable_as_repetition"):
+        raise SystemExit(
+            f"{REGION} cannot host a repetition: missing "
+            f"{block.get('missing_at_bench_size')} or no AZ carries all families."
+        )
+    return block
 
 
 def dump(docs):
@@ -190,7 +224,19 @@ def gen_storageclass():
     )
 
 
-def gen_nodepools(perms):
+def gen_nodepools(perms, az):
+    """All pools are pinned to a SINGLE availability zone.
+
+    Two reasons. First, cross-AZ placement would make network topology a
+    confound: the load generator would be one hop from some clusters and two
+    from others. Second, only one AZ in some regions (eu-west-1c) offers all
+    nine 8th-gen types at all, so an unpinned pool could silently fail to
+    provision one arm of the comparison."""
+    az_req = {
+        "key": "topology.kubernetes.io/zone",
+        "operator": "In",
+        "values": [az],
+    }
     pools = []
     for p in perms:
         pools.append(
@@ -220,6 +266,7 @@ def gen_nodepools(perms):
                                     "operator": "In",
                                     "values": ["on-demand"],
                                 },
+                                az_req,
                             ],
                         },
                     },
@@ -260,6 +307,7 @@ def gen_nodepools(perms):
                                 "operator": "In",
                                 "values": ["on-demand"],
                             },
+                            az_req,
                         ],
                         "taints": [
                             {
@@ -401,7 +449,10 @@ def gen_osb_jobs(perms, workload_name, load_key, rep):
     docs = []
 
     for p in perms:
-        run_id = f"{workload_name}-{load_key}-r{rep}-{p['name']}"
+        # No rep in the name: each region is its own cluster, so the repetition
+        # is implicit in which cluster the object lives on. Keeping it out also
+        # keeps Job names inside the 63-character limit.
+        run_id = f"{workload_name}-{load_key}-{p['name']}"
         cm_name = f"osb-{run_id}"[:253]
         svc = f"{svc_name(p)}.{p['namespace']}.svc.cluster.local"
         es = f"http://{svc}:9200"
@@ -582,9 +633,19 @@ def gen_osb_jobs(perms, workload_name, load_key, rep):
 def main():
     specs = load_specs()
     perms = build_perms(specs)
-    reps = int(os.environ.get("BENCH_REPS", "5"))
     load_keys = os.environ.get("BENCH_LOADS", ",".join(LOAD_LEVELS)).split(",")
     workloads = os.environ.get("BENCH_WORKLOADS", "geonames").split()
+
+    # The repetition index IS the region. Each region runs exactly one pass over
+    # the matrix, so there is no within-region rep loop to get out of sync.
+    rep = REGION
+
+    # Pin to one AZ. Prefer the alphabetically first AZ that carries every
+    # family, so the choice is deterministic and recorded in config.json.
+    azs = specs["azs_with_all_families"]
+    az = os.environ.get("BENCH_AZ") or azs[0]
+    if az not in azs:
+        raise SystemExit(f"AZ {az} does not carry all families in {REGION}: {azs}")
 
     for lk in load_keys:
         if lk not in LOAD_LEVELS:
@@ -600,7 +661,7 @@ def main():
     (OUT / "jobs").mkdir()
 
     (OUT / "storageclass.yaml").write_text(gen_storageclass())
-    (OUT / "nodepools.yaml").write_text(gen_nodepools(perms))
+    (OUT / "nodepools.yaml").write_text(gen_nodepools(perms, az))
     (OUT / "rbac.yaml").write_text(gen_rbac())
 
     for p in perms:
@@ -609,16 +670,17 @@ def main():
     n_jobs = 0
     for w in workloads:
         for lk in load_keys:
-            for rep in range(1, reps + 1):
-                path = OUT / "jobs" / f"{w}-{lk}-r{rep}.yaml"
-                path.write_text(gen_osb_jobs(perms, w, lk, rep))
-                n_jobs += len(perms)
+            path = OUT / "jobs" / f"{w}-{lk}.yaml"
+            path.write_text(gen_osb_jobs(perms, w, lk, rep))
+            n_jobs += len(perms)
 
     config = {
-        "region": specs["region"],
+        "region": REGION,
+        "az": az,
+        "rep": rep,
         "size": SIZE,
         "loadgen_type": LOADGEN_TYPE,
-        "reps": reps,
+        "vcpu_quota": specs.get("vcpu_quota_standard_ondemand"),
         "load_levels": {k: LOAD_LEVELS[k] for k in load_keys},
         "workloads": {w: WORKLOADS[w] for w in workloads},
         "ebs": EBS,
@@ -638,9 +700,18 @@ def main():
 
     sut_cost = sum(p["usd_per_hour"] for p in perms) * 3
     lg_cost = specs["instances"][LOADGEN_TYPE]["usd_per_hour"] * 3
+    vcpu_needed = sum(p["vcpus"] for p in perms) * 3
+    quota = specs.get("vcpu_quota_standard_ondemand")
+    if quota is not None and vcpu_needed > quota:
+        raise SystemExit(
+            f"{REGION}: matrix needs {vcpu_needed} vCPU but the Standard "
+            f"on-demand quota is {quota:.0f}. Karpenter would provision a partial "
+            f"matrix and the comparison would be missing arms."
+        )
 
-    print(f"Generated {len(perms)} clusters × {len(load_keys)} load levels × "
-          f"{reps} reps × {len(workloads)} workload(s) = {n_jobs} runs")
+    budget = f" ({vcpu_needed} vCPU of {quota:.0f} quota)" if quota else ""
+    print(f"[{REGION}/{az}] {len(perms)} clusters × {len(load_keys)} load levels × "
+          f"{len(workloads)} workload(s) = {n_jobs} runs{budget}")
     print(f"\n{'perm':<6} {'instance':<16} {'cpu':<22} {'vCPU':>5} {'cores':>6} "
           f"{'t/c':>4} {'GiB':>5} {'$/hr':>8}")
     for p in perms:

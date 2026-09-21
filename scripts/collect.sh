@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
-# Collect one (workload, load level, rep) cell into results/ as raw artifacts.
+# Collect one (workload, load level) cell for ONE region into results/.
+#
+# The repetition directory is the region name, because region IS the repetition
+# index in this design. results/<workload>/<load>/<region>/<perm>.{csv,log,probe,meta.json}
 #
 # Raw CSV / log / probe output IS committed to git. The previous revision
 # gitignored them, which made every published number unauditable -- nobody could
@@ -7,21 +10,27 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-WORKLOAD="${1:?Usage: $0 <workload> <load> <rep>}"
-LOAD="${2:?Usage: $0 <workload> <load> <rep>}"
-REP="${3:?Usage: $0 <workload> <load> <rep>}"
+WORKLOAD="${1:?Usage: BENCH_REGION=<region> $0 <workload> <load>}"
+LOAD="${2:?Usage: BENCH_REGION=<region> $0 <workload> <load>}"
+REGION="${BENCH_REGION:?BENCH_REGION must be set}"
 
-CONFIG="k8s/generated/config.json"
-[[ -f "$CONFIG" ]] || { echo "Run: python3 scripts/generate.py"; exit 1; }
+CONFIG="k8s/generated/${REGION}/config.json"
+[[ -f "$CONFIG" ]] || { echo "Run: BENCH_REGION=$REGION python3 scripts/generate.py"; exit 1; }
 
 PERMS=$(jq -r '.permutations[]' "$CONFIG")
-DIR="results/${WORKLOAD}/${LOAD}/r${REP}"
+DIR="results/${WORKLOAD}/${LOAD}/${REGION}"
 mkdir -p "$DIR"
 
-echo "==> Collecting ${WORKLOAD}/${LOAD}/r${REP}"
+# Record which region/AZ/instance prices produced this cell, so the raw data is
+# self-describing even if specs.json later changes.
+jq '{region, az, size, loadgen_type, rep, ebs, fixed,
+     prices: (.perm_details | map_values(.usd_per_hour))}' \
+   "$CONFIG" > "$DIR/cell.meta.json"
+
+echo "==> [$REGION] collecting ${WORKLOAD}/${LOAD}"
 OK=0
 for pk in $PERMS; do
-  CM="osb-${WORKLOAD}-${LOAD}-r${REP}-${pk}"
+  CM="osb-${WORKLOAD}-${LOAD}-${pk}"
   if ! kubectl get cm "$CM" -n default >/dev/null 2>&1; then
     echo "  $pk: MISSING (no ConfigMap $CM)"
     continue
@@ -41,4 +50,4 @@ for pk in $PERMS; do
 done
 
 echo "$OK" > "$DIR/.complete"
-echo "==> Collected $OK permutations into $DIR"
+echo "==> [$REGION] collected $OK permutations into $DIR"

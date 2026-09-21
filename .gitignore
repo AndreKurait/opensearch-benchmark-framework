@@ -16,6 +16,12 @@ __pycache__/
 # Generated k8s manifests (reproducible from specs.json + generate.py)
 k8s/generated/
 
+# Per-region terraform state dirs and run logs created by run-all.sh. State is
+# kept per-region so concurrent regions cannot corrupt a shared state file.
+.runs/
+.terraform-plugin-cache/
+logs/
+
 # Secrets
 *.pem
 *.key

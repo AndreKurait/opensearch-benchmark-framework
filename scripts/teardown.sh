@@ -6,8 +6,13 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-CONFIG="k8s/generated/config.json"
-[[ -f "$CONFIG" ]] || { echo "Nothing to tear down"; exit 0; }
+# Scoped to one region's generated manifests. Deleting by the wrong region's
+# nodepool list would leave nodes running and billing, so the region is required
+# rather than defaulted.
+REGION="${BENCH_REGION:?BENCH_REGION must be set (which region to tear down)}"
+GEN="k8s/generated/${REGION}"
+CONFIG="${GEN}/config.json"
+[[ -f "$CONFIG" ]] || { echo "[$REGION] Nothing to tear down"; exit 0; }
 
 PERMS=$(jq -r '.permutations[]' "$CONFIG")
 
@@ -35,10 +40,10 @@ for _ in $(seq 1 30); do
   sleep 10
 done
 
-kubectl delete -f k8s/generated/nodepools.yaml --ignore-not-found >/dev/null 2>&1 || true
-kubectl delete -f k8s/generated/storageclass.yaml --ignore-not-found >/dev/null 2>&1 || true
-kubectl delete -f k8s/generated/rbac.yaml --ignore-not-found >/dev/null 2>&1 || true
+kubectl delete -f "${GEN}"/nodepools.yaml --ignore-not-found >/dev/null 2>&1 || true
+kubectl delete -f "${GEN}"/storageclass.yaml --ignore-not-found >/dev/null 2>&1 || true
+kubectl delete -f "${GEN}"/rbac.yaml --ignore-not-found >/dev/null 2>&1 || true
 
-echo "==> Benchmark resources removed."
+echo "==> [$REGION] Benchmark resources removed."
 echo "    Results are preserved in results/ (committed to git)."
 echo "    To remove the EKS cluster and VPC:  cd terraform && terraform destroy"

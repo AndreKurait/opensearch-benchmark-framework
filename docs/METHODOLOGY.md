@@ -100,15 +100,68 @@ quantities.
 
 ### 4. Statistics before conclusions
 
-Every cell is run `BENCH_REPS` times (default 5). The report prints the median
-with its interquartile range, and emits a comparative percentage **only when the
-two IQRs do not overlap**. Otherwise it prints *within noise*.
+Every cell is run once per region, and each region is one repetition (see rule
+4a). The report prints the median with its interquartile range, and emits a
+comparative percentage **only when the two IQRs do not overlap**. Otherwise it
+prints *within noise*.
 
 *Previously:* n=1, no repetitions, no intervals. The variance was measurable
 from the report's own contents: the EBS tier provably changed indexing time by
 ~1%, yet the same tier change swung search p50 by −50% to +94% across
 permutations. Run-to-run noise was on the order of ±100%, which is far larger
 than the 25–37% differences being published as findings.
+
+### 4a. One region is one repetition, and it runs all nine instance types
+
+The seven benchmark regions run **concurrently**, each executing the full
+9-instance-type matrix once. Regions are the repetition axis.
+
+This is not only a way to finish in 3 hours instead of 17. It is the more
+defensible experiment. Repeating a cell on the *same* nodes samples only
+run-to-run jitter, while the largest noise source in a cloud benchmark is
+**host placement** — which physical socket you landed on, what neighbours you
+share, how the rack is cabled. Same-node repetitions cannot see that variance,
+so they produce error bars that are too narrow and invite over-claiming. Seven
+regions means seven independent sets of physical hosts, so the IQRs widen to
+something honest. Conclusions get *harder* to reach, not easier.
+
+Two rules protect this from becoming a confound of its own:
+
+* **A region always runs all nine instance types, or it is dropped entirely.**
+  A region contributing only Graviton results would compare Graviton in region A
+  against Turin in region B, which is no longer a CPU comparison. `fetch_specs.py`
+  therefore marks a region `usable_as_repetition` only if every one of the nine
+  types is offered at the benchmark size in a single shared AZ. Only 7 of 18
+  candidate regions qualify — the AMD `*8a` types are the scarce ones.
+* **Every node in a region is pinned to one AZ.** Otherwise some clusters sit one
+  network hop from the load generator and others two, and that shows up as a
+  throughput difference indistinguishable from an architecture difference. In
+  `eu-west-1` exactly one AZ (`eu-west-1c`) offers all nine types, which is why
+  terraform takes `bench_az` explicitly rather than trusting the first three AZs
+  the API returns.
+
+Because regions are also the repetition axis, **prices are never pooled**. The
+same instance costs up to 29% more in `ap-northeast-1` than in `us-east-2`, so a
+price-performance number averaged over regions would be meaningless. `report.py`
+computes price-per-unit-work per region, quotes absolute dollars in one named
+reference region, and asserts the *premium* is region-invariant — it is, to
+within 0.5%, which is itself a useful cross-check.
+
+`report.py` additionally asserts the hardware identity of every region before
+pooling anything and refuses to produce a report if they disagree
+(*"Results are not poolable"*), and `validate_manifests.py` asserts that heap
+size, client counts, EBS settings and offered load are byte-identical across all
+seven generated regions. A configuration difference between repetitions would
+otherwise be silently absorbed into the error bars as if it were noise.
+
+Finally, each region votes independently on the *sign* of every comparison. A
+unanimous 7/7 vote is much stronger evidence than a pooled median; a split vote
+means the effect is not robust **regardless of how the pooled IQRs fall**, and
+the report says so explicitly. This is a deliberate second, independent guard on
+top of the IQR test.
+
+*Side effect worth knowing:* a region that fails mid-run costs one repetition,
+not the whole experiment. The previous single-region design lost everything.
 
 ### 5. Throughput is the mean, not the max
 
@@ -196,8 +249,17 @@ These are real and are not fixed. Do not let the report imply otherwise.
 * **Vectorisation parity is recorded, not enforced.** The framework captures JVM
   and plugin state so an arm64/x86 Lucene vector-path difference is visible in
   the artifacts, but it does not pin JVM flags to force equivalence.
-* **Single region, single run of the matrix.** Repetitions are within one
-  provisioning of the cluster, so cluster-to-cluster variance is not sampled.
+* **Region is confounded with repetition.** Each region contributes exactly one
+  observation per cell, so a genuine regional effect (a different host hardware
+  revision in one region, say) is inseparable from ordinary noise. This is the
+  conservative direction — it widens intervals and suppresses claims rather than
+  manufacturing them — but it means a *single* region's numbers should not be
+  quoted on their own, and n is 7, which is small.
+* **Only 7 regions carry all nine instance types**, so the repetition count is
+  capped by AMD `*8a` availability, not chosen for statistical power.
+* **No within-region repetition.** Placement variance is now sampled, but
+  run-to-run jitter on fixed hardware is not measured separately from it, so the
+  two cannot be attributed independently.
 
 ## How to read the report
 
@@ -210,3 +272,6 @@ These are real and are not fixed. Do not let the report imply otherwise.
    near-miss to be rounded into a claim.
 6. Read the **price-adjusted** column before concluding anything about value.
    A performance win smaller than the price premium is a loss.
+7. Check the **Cross-region agreement** table last, and let it override. A split
+   vote means the direction of the effect was not reproducible across independent
+   hardware, which disqualifies the percentage no matter how clean the IQRs look.

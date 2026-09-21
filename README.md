@@ -44,8 +44,9 @@ every instance type, so concurrency is varied independently of instance family.
 **Controlled identically everywhere:** JVM heap (26 GiB), CPU request, client
 counts, shard/replica counts, storage tier, and the load-generator instance type.
 
-**Reported:** medians over 5 repetitions with interquartile ranges. A difference
-is only stated as a percentage when the IQRs do not overlap.
+**Reported:** medians over 7 repetitions — one per region, on independent
+hardware — with interquartile ranges. A difference is only stated as a percentage
+when the IQRs do not overlap *and* the regions agree on its direction.
 
 > ### Read this before quoting a number
 > At equal vCPU count the vendors do not give you equal hardware. Graviton4 and
@@ -57,8 +58,10 @@ is only stated as a percentage when the IQRs do not overlap.
 
 ## Architecture
 
+7 regions concurrently, each one independent repetition of:
+
 ```
-EKS Auto Mode (Karpenter built-in)
+EKS Auto Mode (Karpenter built-in)      [all nodes pinned to ONE AZ]
 ├── 9 SUT NodePools (one per instance type, 3 nodes each)
 ├── 1 loadgen NodePool  (fixed instance type, tainted, never runs OpenSearch)
 ├── 9 OpenSearch clusters (3-node each, identical config)
@@ -79,42 +82,84 @@ cd opensearch-benchmark-framework
 bash scripts/run-all.sh
 ```
 
+### One region is one repetition
+
+The suite runs in **7 regions concurrently**, each executing the full
+9-instance-type matrix once. Regions are the repetition axis, for two reasons:
+
+* **Wall clock.** Repetitions run in parallel rather than in series: 7 reps take
+  ~3 h instead of ~17 h, because the only thing that duplicates is provisioning
+  overhead, and that duplicates in parallel too.
+* **Better error bars.** Repeating a cell on the *same* nodes samples only
+  run-to-run jitter. The dominant noise source in cloud benchmarking is host
+  placement, and 7 regions means 7 independent sets of physical hosts. IQRs get
+  wider and more honest, so claims get harder to make, not easier.
+
+Only 7 of 18 candidate regions offer all nine 8th-gen types in a single shared
+AZ (the AMD `*8a` types are the scarce ones). A region must run **all nine** or
+it is dropped — a partial region would compare Graviton in one region against
+Turin in another, which is not a CPU comparison. `fetch_specs.py` determines this
+from the AWS APIs and records it as `usable_as_repetition` in `specs.json`.
+
+Because regions differ in price by up to 29%, prices are **never pooled**:
+`report.py` computes price-performance per region and quotes absolute dollars in
+one named reference region.
+
 ### Controlling matrix size
 
-Cost scales with load levels × repetitions (cells run sequentially; all nine
-instance types run in parallel within a cell). Check before you commit to a run:
+Cost scales with load levels × regions (cells run sequentially within a region;
+all nine instance types run in parallel within a cell). Check before committing:
 
 ```bash
-python3 scripts/fetch_specs.py && python3 scripts/generate.py && python3 scripts/estimate.py
+python3 scripts/fetch_specs.py
+for rg in $(python3 -c "import json;print(' '.join(r for r,v in json.load(open('specs.json'))['regions'].items() if v['usable_as_repetition']))"); do
+  BENCH_REGION=$rg python3 scripts/generate.py
+done
+python3 scripts/validate_manifests.py && python3 scripts/estimate.py
 ```
 
 ```bash
-# Pilot: validate the harness end to end, one load level, 2 reps
-BENCH_REPS=2 BENCH_LOADS=saturate bash scripts/run-all.sh
+# Pilot: validate the harness end to end in two regions, one load level
+BENCH_LOADS=saturate bash scripts/run-all.sh --regions us-east-1,us-east-2
 
-# Full: 4 load levels, 5 reps
-BENCH_REPS=5 bash scripts/run-all.sh
+# Full: 4 load levels, all 7 regions (~3 h, ~$1,310)
+bash scripts/run-all.sh
 
 # Cheap smoke test on burstable instances (NOT publication quality)
-BENCH_SIZE=2xlarge BENCH_REPS=2 BENCH_LOADS=saturate bash scripts/run-all.sh
+BENCH_SIZE=2xlarge BENCH_LOADS=saturate bash scripts/run-all.sh --regions us-east-2
 ```
 
-Environment variables: `BENCH_SIZE`, `BENCH_REPS`, `BENCH_LOADS`,
-`BENCH_WORKLOADS`, `BENCH_LOADGEN_TYPE`, `OSB_IMAGE`.
+Environment variables: `BENCH_SIZE`, `BENCH_LOADS`, `BENCH_WORKLOADS`,
+`BENCH_LOADGEN_TYPE`, `BENCH_REGION`, `BENCH_AZ`, `OSB_IMAGE`.
 
-### Step by step
+Each region gets its own terraform state directory (`.runs/<region>/`) and its
+own kubeconfig, so concurrent runs cannot corrupt shared state and concurrent
+`kubectl` calls cannot race on the current context.
+
+A pre-flight check refuses to generate if the matrix (960 vCPU) exceeds a
+region's `Running On-Demand Standard instances` quota — all nine families share
+one bucket, and Karpenter would otherwise quietly provision a partial matrix and
+produce a comparison with missing arms.
+
+### Step by step (single region)
 
 ```bash
-python3 scripts/fetch_specs.py --region us-east-1   # prices + core counts from AWS APIs
-python3 scripts/generate.py                         # manifests
-python3 scripts/estimate.py                         # cost/time estimate
-cd terraform && terraform init && terraform apply && cd ..
+export BENCH_REGION=us-east-1
+python3 scripts/fetch_specs.py            # prices, cores, quotas -- per region
+python3 scripts/generate.py               # manifests -> k8s/generated/$BENCH_REGION/
+python3 scripts/validate_manifests.py     # experiment invariants
+python3 scripts/estimate.py               # cost/time estimate
+# provision the cluster from terraform/ with region + bench_az set, then:
 eval "$(cd terraform && terraform output -raw kubeconfig_cmd)"
-bash scripts/deploy.sh                              # 9 clusters + loadgen pool
-bash scripts/run.sh geonames                        # all load levels × reps
-python3 scripts/report.py                           # results/REPORT.md
-bash scripts/teardown.sh && cd terraform && terraform destroy
+bash scripts/deploy.sh                    # 9 clusters + loadgen pool
+bash scripts/run.sh geonames              # all load levels for this region
+python3 scripts/report.py                 # results/REPORT.md
+bash scripts/teardown.sh                  # then destroy the cluster
 ```
+
+`terraform/` needs `region` and `bench_az` set to match `BENCH_REGION`; the AZ
+must be one that offers all nine instance types (`azs_with_all_families` in
+`specs.json`). `run-all.sh` handles this automatically for every region.
 
 ## Customisation
 
@@ -143,29 +188,53 @@ Adding an instance type requires it to be present in `specs.json` — re-run
 │   ├── generate.py             # permutation config → K8s manifests
 │   ├── estimate.py             # cost / wall-clock estimate
 │   ├── deploy.sh               # 9 clusters + loadgen pool
-│   ├── run.sh                  # all load levels × reps, checkpointed
+│   ├── run.sh                  # one region's load levels, checkpointed
+│   ├── run-all.sh              # all regions concurrently, end to end
 │   ├── collect.sh              # one cell → results/ raw artifacts
 │   ├── report.py               # raw results → REPORT.md with IQRs
+│   ├── validate_manifests.py   # experiment invariants (CI gate)
+│   ├── test_report_synthetic.py # exercises report.py on fabricated results
 │   └── teardown.sh
-├── specs.json                  # committed API-derived specs (auditable)
+├── specs.json                  # committed API-derived specs, per region
 ├── docs/METHODOLOGY.md         # what this measures, and what it doesn't
-├── results/                    # RAW CSV/log/probe output IS committed
-└── k8s/generated/              # generated manifests (gitignored)
+├── results/<wl>/<load>/<region>/  # RAW CSV/log/probe output IS committed
+├── logs/<region>.log           # per-region run logs (gitignored)
+└── k8s/generated/<region>/     # generated manifests (gitignored)
 ```
 
 ## Cost
 
-Depends entirely on matrix size; `scripts/estimate.py` prints the figure for your
-configuration before anything is provisioned. Cells run sequentially, so wall
-clock and cost scale with `load levels × repetitions`, not with instance count.
-`run-all.sh` requires explicit confirmation before provisioning.
+Depends on matrix size; `scripts/estimate.py` prints the figure for your
+configuration before anything is provisioned, and `run-all.sh` requires explicit
+confirmation. Wall clock is set by **one** region's pass over the load levels,
+because regions run concurrently; cost is the sum across regions.
+
+For the default matrix (9 types × 4 load levels × `geonames` × 7 regions = 252
+runs, 210 nodes): **~3.0 h, ~$1,310**. The same 7 repetitions run sequentially in
+the cheapest single region would be ~17 h and ~$985 — so parallelising across
+regions is ~5.7× faster for ~1.33× the cost.
+
+## Testing the reporting path
+
+A crash or mis-aggregation in `report.py` would only surface *after* the
+benchmark has been paid for, so it is tested against fabricated results with a
+known planted answer:
+
+```bash
+python3 scripts/test_report_synthetic.py
+```
+
+This asserts that a unanimous cross-region effect is detected, that a 4–3 split
+is refused rather than quoted, and that runs with error rates or doc-count
+mismatches are excluded from the medians.
 
 ## CI
 
 GitHub Actions on every push/PR: secrets scan, Python/shell/Terraform lint, and
-a dry-run that generates the full matrix and asserts the invariants that matter
-(load generator is tainted off the SUT, client counts and heap are identical
-across permutations, no prices hardcoded outside `specs.json`).
+a dry-run that generates the matrix for **every** benchmark region and asserts
+the invariants that matter (load generator is tainted off the SUT, all nodes
+AZ-pinned, client counts and heap identical across permutations *and across
+regions*, no prices hardcoded outside `specs.json`).
 
 ## License
 
