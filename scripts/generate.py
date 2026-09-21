@@ -1,234 +1,658 @@
 #!/usr/bin/env python3
-"""Generate K8s manifests for OpenSearch benchmark permutations.
+"""Generate K8s manifests for OpenSearch CPU-architecture benchmark permutations.
 
-Edit INSTANCES, EBS_TIERS, WORKLOADS below to customize.
-Run: python3 scripts/generate.py
+Design constraints (each one exists because violating it produced a wrong
+conclusion in an earlier revision of this repo -- see docs/METHODOLOGY.md):
+
+ 1. The load generator runs on a DEDICATED, ARCHITECTURE-FIXED node pool. It is
+    never co-located with the system under test. Otherwise a slower-per-core SUT
+    also slows the measuring instrument and the architecture delta is counted
+    twice.
+ 2. Concurrency/offered-load is an INDEPENDENT axis, not a function of instance
+    family. Otherwise you cannot distinguish "CPU A is faster" from "CPU A was
+    tested at a more favourable occupancy".
+ 3. JVM heap and client count are FIXED across all instance types. Only the
+    instance itself varies. RAM differences between c/m/r remain, but they are
+    now the only uncontrolled variable and they are symmetric across vendors.
+ 4. Latency is measured at a FIXED offered rate. Latency and throughput are
+    never both free variables in the same measurement.
+ 5. Prices and core counts come from specs.json (AWS APIs), never hardcoded.
+
+Run: python3 scripts/fetch_specs.py && python3 scripts/generate.py
 """
-import json, os, shutil
+import json
+import os
+import shutil
 from pathlib import Path
 
 import yaml
 
-# ── Permutation axes (edit these) ─────────────────────────────────────────
+ROOT = Path(__file__).resolve().parent.parent
+SPECS_PATH = ROOT / "specs.json"
+OUT = ROOT / "k8s" / "generated"
 
-INSTANCES = {
-    "m8g": {"type": "m8g.2xlarge", "cpu": "Graviton4", "arch": "arm64", "family": "m", "price": 0.2450},
-    "m8a": {"type": "m8a.2xlarge", "cpu": "AMD Turin",  "arch": "amd64", "family": "m", "price": 0.2682},
-    "m8i": {"type": "m8i.2xlarge", "cpu": "Intel Emerald Rapids", "arch": "amd64", "family": "m", "price": 0.2856},
-    "c8g": {"type": "c8g.2xlarge", "cpu": "Graviton4", "arch": "arm64", "family": "c", "price": 0.1928},
-    "c8a": {"type": "c8a.2xlarge", "cpu": "AMD Turin",  "arch": "amd64", "family": "c", "price": 0.2199},
-    "c8i": {"type": "c8i.2xlarge", "cpu": "Intel Emerald Rapids", "arch": "amd64", "family": "c", "price": 0.2380},
-    "r8g": {"type": "r8g.2xlarge", "cpu": "Graviton4", "arch": "arm64", "family": "r", "price": 0.3005},
-    "r8a": {"type": "r8a.2xlarge", "cpu": "AMD Turin",  "arch": "amd64", "family": "r", "price": 0.3380},
-    "r8i": {"type": "r8i.2xlarge", "cpu": "Intel Emerald Rapids", "arch": "amd64", "family": "r", "price": 0.3780},
+# ── Permutation axes ──────────────────────────────────────────────────────
+
+# Instance families under test. Size is deliberately >= 8xlarge: at 2xlarge the
+# EBS and network allocations are BURSTABLE (312.5 MB/s baseline vs 1250 MB/s
+# burst), so credit depletion mid-run is a large, uncontrolled noise source.
+# At 8xlarge, baseline == maximum, so storage behaviour is steady-state.
+FAMILY_KEYS = ["m8g", "m8a", "m8i", "c8g", "c8a", "c8i", "r8g", "r8a", "r8i"]
+SIZE = os.environ.get("BENCH_SIZE", "8xlarge")
+
+# Load generator: ONE instance type for every permutation, so the measuring
+# instrument is identical regardless of which CPU is under test.
+LOADGEN_TYPE = os.environ.get("BENCH_LOADGEN_TYPE", "c8i.8xlarge")
+
+# Offered search load in ops/sec. This is the concurrency axis. "saturate"
+# removes rate limiting to measure maximum throughput; the numeric levels hold
+# offered load constant so that LATENCY is comparable across architectures.
+#
+# Reporting rule enforced in report.py:
+#   - numeric levels  -> compare latency / service time (throughput is pinned)
+#   - "saturate"      -> compare throughput (latency is meaningless here)
+LOAD_LEVELS = {
+    "load-500": {"target_throughput": 500, "kind": "fixed-rate"},
+    "load-2000": {"target_throughput": 2000, "kind": "fixed-rate"},
+    "load-8000": {"target_throughput": 8000, "kind": "fixed-rate"},
+    "saturate": {"target_throughput": 0, "kind": "saturate"},
 }
 
-EBS_TIERS = {
-    "gp3-default": {"throughput": 125,  "iops": 3000,  "size": "100Gi"},
-    "gp3-fast":    {"throughput": 1000, "iops": 10000, "size": "100Gi"},
-}
+# Single storage tier, provisioned to be ACTUALLY ACHIEVABLE at 8xlarge
+# (1250 MB/s EBS baseline). The old default/fast EBS axis was dead weight: the
+# "fast" tier asked for 1000 MB/s on a node with a 312.5 MB/s baseline, so it
+# was never realised and contributed only noise.
+EBS = {"throughput": 1000, "iops": 16000, "size": "500Gi", "type": "gp3"}
 
 WORKLOADS = {
-    "geonames":  {"docs": "11.4M", "test_procedure": "append-no-conflicts"},
-    "pmc":       {"docs": "574K",  "test_procedure": "append-no-conflicts"},
-    "nyc_taxis": {"docs": "165M",  "test_procedure": "append-no-conflicts-index-only"},
-    "http_logs": {"docs": "247M",  "test_procedure": "append-no-conflicts-index-only"},
+    "geonames": {
+        "docs": 11396505,
+        "index": "geonames",
+        "test_procedure": "append-no-conflicts",
+        "cache_resident": True,
+    },
+    "nyc_taxis": {
+        "docs": 165346692,
+        "index": "nyc_taxis",
+        "test_procedure": "append-no-conflicts",
+        "cache_resident": False,
+    },
+    "http_logs": {
+        "docs": 247249096,
+        "index": "logs-*",
+        "test_procedure": "append-no-conflicts",
+        "cache_resident": False,
+    },
+    "pmc": {
+        "docs": 574199,
+        "index": "pmc",
+        "test_procedure": "append-no-conflicts",
+        "cache_resident": True,
+    },
 }
 
-JVM_HEAP       = {"m": "4g", "c": "2g", "r": "8g"}
-MEM_REQUEST    = {"m": "12Gi", "c": "6Gi", "r": "24Gi"}
-SEARCH_CLIENTS = {"m": 4, "c": 2, "r": 8}
-OS_VERSION     = "3.5.0"
+# ── FIXED across every permutation (decoupled from instance family) ───────
 
-OSB_IMAGE = os.environ.get("OSB_IMAGE", "public.ecr.aws/opensearchproject/opensearch-benchmark:latest")
-OUT = Path(__file__).resolve().parent.parent / "k8s" / "generated"
+JVM_HEAP = "26g"          # below the 32 GiB compressed-oops cliff, with room for
+                          # metaspace/direct buffers inside the request below
+MEM_REQUEST = "32Gi"      # must fit the SMALLEST node in the matrix (c8*.8xlarge, 64 GiB).
+                          # Deliberately NO memory limit: a cgroup limit throttles
+                          # page cache, and page-cache size is exactly the
+                          # legitimate difference between the c/m/r families.
+CPU_REQUEST = "28"        # of 32 vCPU, leaving headroom for kubelet/DaemonSets
+SEARCH_CLIENTS = 64       # ample and identical everywhere: never the bottleneck
+BULK_CLIENTS = 32
+BULK_SIZE = 5000
+SHARDS = 3
+REPLICAS = 1
+OS_VERSION = "3.5.0"
+
+OSB_IMAGE = os.environ.get(
+    "OSB_IMAGE", "public.ecr.aws/opensearchproject/opensearch-benchmark:latest"
+)
 
 # ── Helpers ───────────────────────────────────────────────────────────────
 
-def perm_id(inst_key, ebs_key):
-    return f"{inst_key}-{ebs_key}"
 
-def ns_for(perm):
-    return f"os-{perm}"
+def load_specs():
+    if not SPECS_PATH.exists():
+        raise SystemExit("No specs.json. Run: python3 scripts/fetch_specs.py")
+    return json.loads(SPECS_PATH.read_text())
+
 
 def dump(docs):
-    return "---\n".join(yaml.dump(d, default_flow_style=False, sort_keys=False) for d in docs)
+    return "---\n".join(
+        yaml.dump(d, default_flow_style=False, sort_keys=False) for d in docs
+    )
 
-def build_perms():
+
+def svc_name(p):
+    """Headless service / StatefulSet name produced by the OpenSearch Helm
+    chart: '<clusterName>-<nodeGroup>'. Single source of truth -- the previous
+    revision hardcoded 'opensearch-cluster-master' in the OSB target while the
+    chart actually created '<perm>-master', so the generated jobs could not
+    have reached the clusters they were meant to measure."""
+    return f"{p['name']}-master"
+
+
+def build_perms(specs):
+    """One permutation per instance type. Load level is a run-time axis, not a
+    deployment axis -- the same cluster is re-used across load levels so that
+    cluster-to-cluster variation cannot masquerade as a load effect."""
     perms = []
-    for ik, inst in INSTANCES.items():
-        for ek, ebs in EBS_TIERS.items():
-            pid = perm_id(ik, ek)
-            perms.append({
-                "name": pid, "namespace": ns_for(pid),
-                "instance_key": ik, "instance_type": inst["type"],
-                "cpu": inst["cpu"], "arch": inst["arch"],
-                "family": inst["family"], "price": inst["price"],
-                "ebs_key": ek, "ebs_throughput": ebs["throughput"],
-                "ebs_iops": ebs["iops"], "ebs_size": ebs["size"],
-                "jvm_heap": JVM_HEAP[inst["family"]],
-                "search_clients": SEARCH_CLIENTS[inst["family"]],
-            })
+    for fk in FAMILY_KEYS:
+        it = f"{fk}.{SIZE}"
+        s = specs["instances"].get(it)
+        if s is None:
+            raise SystemExit(f"{it} missing from specs.json; re-run fetch_specs.py")
+        perms.append(
+            {
+                "name": fk,
+                "namespace": f"os-{fk}",
+                "instance_type": it,
+                "cpu": s["cpu"],
+                "microarchitecture": s["microarchitecture"],
+                "arch": s["architecture"],
+                "family": s["family"],
+                "vcpus": s["vcpus"],
+                "physical_cores": s["physical_cores"],
+                "threads_per_core": s["threads_per_core"],
+                "memory_gib": s["memory_mib"] // 1024,
+                "sustained_ghz": s["sustained_ghz"],
+                "clock_marketing": s["clock_speed_marketing"],
+                "usd_per_hour": s["usd_per_hour"],
+                "ebs_baseline_mbps": s["ebs_baseline_mbps"],
+            }
+        )
     return perms
+
 
 # ── Generators ────────────────────────────────────────────────────────────
 
-def gen_storageclasses():
-    return dump([{
-        "apiVersion": "storage.k8s.io/v1", "kind": "StorageClass",
-        "metadata": {"name": k},
-        "provisioner": "ebs.csi.eks.amazonaws.com",
-        "volumeBindingMode": "WaitForFirstConsumer",
-        "reclaimPolicy": "Delete",
-        "parameters": {"type": "gp3", "throughput": str(t["throughput"]), "iops": str(t["iops"])},
-    } for k, t in EBS_TIERS.items()])
+
+def gen_storageclass():
+    return dump(
+        [
+            {
+                "apiVersion": "storage.k8s.io/v1",
+                "kind": "StorageClass",
+                "metadata": {"name": "bench-ebs"},
+                "provisioner": "ebs.csi.eks.amazonaws.com",
+                "volumeBindingMode": "WaitForFirstConsumer",
+                "reclaimPolicy": "Delete",
+                "parameters": {
+                    "type": EBS["type"],
+                    "throughput": str(EBS["throughput"]),
+                    "iops": str(EBS["iops"]),
+                },
+            }
+        ]
+    )
+
 
 def gen_nodepools(perms):
-    return dump([{
-        "apiVersion": "karpenter.sh/v1", "kind": "NodePool",
-        "metadata": {"name": p["name"]},
-        "spec": {
-            "template": {
-                "metadata": {"labels": {"bench/perm": p["name"]}},
-                "spec": {
-                    "nodeClassRef": {"group": "eks.amazonaws.com", "kind": "NodeClass", "name": "default"},
-                    "requirements": [
-                        {"key": "node.kubernetes.io/instance-type", "operator": "In", "values": [p["instance_type"]]},
-                        {"key": "karpenter.sh/capacity-type", "operator": "In", "values": ["on-demand"]},
-                    ],
-                },
-            },
-            "limits": {"cpu": "32"},
-            "disruption": {"consolidateAfter": "Never", "budgets": [{"nodes": "0"}]},
-        },
-    } for p in perms])
-
-def gen_rbac():
-    return dump([
-        {"apiVersion": "v1", "kind": "ServiceAccount", "metadata": {"name": "osb-sa", "namespace": "default"}},
-        {"apiVersion": "rbac.authorization.k8s.io/v1", "kind": "Role",
-         "metadata": {"name": "osb-writer", "namespace": "default"},
-         "rules": [{"apiGroups": [""], "resources": ["configmaps"], "verbs": ["create","update","patch","get"]}]},
-        {"apiVersion": "rbac.authorization.k8s.io/v1", "kind": "RoleBinding",
-         "metadata": {"name": "osb-writer", "namespace": "default"},
-         "roleRef": {"apiGroup": "rbac.authorization.k8s.io", "kind": "Role", "name": "osb-writer"},
-         "subjects": [{"kind": "ServiceAccount", "name": "osb-sa", "namespace": "default"}]},
-    ])
-
-def gen_helm_values(p):
-    return yaml.dump({
-        "clusterName": p["name"],
-        "nodeGroup": "master",
-        "replicas": 3,
-        "roles": ["master","ingest","data","remote_cluster_client"],
-        "resources": {"requests": {"memory": MEM_REQUEST[p["family"]], "cpu": "6"}},
-        "opensearchJavaOpts": f"-Xms{p['jvm_heap']} -Xmx{p['jvm_heap']}",
-        "persistence": {"enabled": True, "size": p["ebs_size"], "storageClass": p["ebs_key"]},
-        "extraEnvs": [{"name": "DISABLE_SECURITY_PLUGIN", "value": "true"}],
-        "config": {"opensearch.yml": f"cluster.name: {p['name']}\nnetwork.host: 0.0.0.0\nplugins.security.disabled: true\n"},
-        "nodeSelector": {"bench/perm": p["name"]},
-        "antiAffinity": "soft",
-        "protocol": "http",
-        "sysctlInit": {"enabled": True},
-        "startupProbe": {"tcpSocket": {"port": 9200}, "initialDelaySeconds": 30, "periodSeconds": 10, "failureThreshold": 30},
-    }, default_flow_style=False, sort_keys=False)
-
-def gen_osb_jobs(perms, workload_name):
-    wl = WORKLOADS[workload_name]
-    docs = []
+    pools = []
     for p in perms:
-        cm_name = f"osb-{workload_name}-{p['name']}"
-        svc = f"opensearch-cluster-master.{p['namespace']}.svc.cluster.local"
-        clients = p["search_clients"]
-        wp = f"bulk_size:5000,number_of_replicas:1,number_of_shards:3,target_throughput:10000,search_clients:{clients},bulk_indexing_clients:{clients}"
-
-        save_cmd = (
-            "python3 -c \""
-            "import urllib.request,json,os,ssl;"
-            "t=open('/var/run/secrets/kubernetes.io/serviceaccount/token').read();"
-            "ctx=ssl.create_default_context(cafile='/var/run/secrets/kubernetes.io/serviceaccount/ca.crt');"
-            "h=os.environ['KUBERNETES_SERVICE_HOST'];p=os.environ['KUBERNETES_SERVICE_PORT'];"
-            "csv=open('/tmp/r.csv').read() if os.path.exists('/tmp/r.csv') else 'MISSING';"
-            "log=open('/tmp/osb.log').read()[-12000:] if os.path.exists('/tmp/osb.log') else 'MISSING';"
-            f"cm=json.dumps({{'apiVersion':'v1','kind':'ConfigMap','metadata':{{'name':'{cm_name}','namespace':'default','labels':{{'bench':'osb','workload':'{workload_name}'}}}},'data':{{'csv':csv,'log':log}}}}).encode();"
-            "hdrs={'Authorization':f'Bearer {t}','Content-Type':'application/json'};"
-            f"url=f'https://{{h}}:{{p}}/api/v1/namespaces/default/configmaps';"
-            "req=urllib.request.Request(url,data=cm,method='POST',headers=hdrs);"
-            "try: urllib.request.urlopen(req,context=ctx)\n"
-            "except urllib.error.HTTPError:"
-            f" urllib.request.urlopen(urllib.request.Request(url+'/{cm_name}',data=cm,method='PUT',headers=hdrs),context=ctx);"
-            f"print('Saved {cm_name}')"
-            "\""
-        )
-
-        cmd = (
-            f"opensearch-benchmark run "
-            f"--pipeline=benchmark-only "
-            f"--workload={workload_name} "
-            f"--target-hosts=http://{svc}:9200 "
-            f"--distribution-version={OS_VERSION} "
-            f"--workload-params='{wp}' "
-            f"--test-procedure={wl['test_procedure']} "
-            f"--client-options='timeout:120' "
-            f"--on-error=continue "
-            f"--results-format=csv "
-            f"--results-file=/tmp/r.csv "
-            f"2>&1 | tee /tmp/osb.log; "
-            f"{save_cmd}"
-        )
-
-        docs.append({
-            "apiVersion": "batch/v1", "kind": "Job",
-            "metadata": {"name": f"osb-{workload_name}-{p['name']}", "namespace": "default",
-                         "labels": {"bench": "osb", "workload": workload_name, "perm": p["name"]}},
-            "spec": {
-                "backoffLimit": 2, "ttlSecondsAfterFinished": 7200,
-                "template": {
-                    "metadata": {"labels": {"bench": "osb", "workload": workload_name, "perm": p["name"]},
-                                 "annotations": {"karpenter.sh/do-not-disrupt": "true"}},
-                    "spec": {
-                        "serviceAccountName": "osb-sa",
-                        "nodeSelector": {"bench/perm": p["name"]},
-                        "restartPolicy": "OnFailure",
-                        "containers": [{
-                            "name": "osb", "image": OSB_IMAGE,
-                            "command": ["/bin/sh", "-c"], "args": [cmd],
-                            "resources": {"requests": {"cpu": "1", "memory": "4Gi"}, "limits": {"cpu": "2", "memory": "6Gi"}},
-                        }],
+        pools.append(
+            {
+                "apiVersion": "karpenter.sh/v1",
+                "kind": "NodePool",
+                "metadata": {"name": f"sut-{p['name']}"},
+                "spec": {
+                    "template": {
+                        "metadata": {
+                            "labels": {"bench/role": "sut", "bench/perm": p["name"]}
+                        },
+                        "spec": {
+                            "nodeClassRef": {
+                                "group": "eks.amazonaws.com",
+                                "kind": "NodeClass",
+                                "name": "default",
+                            },
+                            "requirements": [
+                                {
+                                    "key": "node.kubernetes.io/instance-type",
+                                    "operator": "In",
+                                    "values": [p["instance_type"]],
+                                },
+                                {
+                                    "key": "karpenter.sh/capacity-type",
+                                    "operator": "In",
+                                    "values": ["on-demand"],
+                                },
+                            ],
+                        },
+                    },
+                    # 3 SUT nodes only. No room for anything else to land here.
+                    "limits": {"cpu": str(p["vcpus"] * 3)},
+                    "disruption": {
+                        "consolidateAfter": "Never",
+                        "budgets": [{"nodes": "0"}],
                     },
                 },
+            }
+        )
+
+    # Load-generator pool: fixed instance type, tainted so that no OpenSearch
+    # pod can ever be scheduled onto it.
+    pools.append(
+        {
+            "apiVersion": "karpenter.sh/v1",
+            "kind": "NodePool",
+            "metadata": {"name": "loadgen"},
+            "spec": {
+                "template": {
+                    "metadata": {"labels": {"bench/role": "loadgen"}},
+                    "spec": {
+                        "nodeClassRef": {
+                            "group": "eks.amazonaws.com",
+                            "kind": "NodeClass",
+                            "name": "default",
+                        },
+                        "requirements": [
+                            {
+                                "key": "node.kubernetes.io/instance-type",
+                                "operator": "In",
+                                "values": [LOADGEN_TYPE],
+                            },
+                            {
+                                "key": "karpenter.sh/capacity-type",
+                                "operator": "In",
+                                "values": ["on-demand"],
+                            },
+                        ],
+                        "taints": [
+                            {
+                                "key": "bench/loadgen",
+                                "value": "true",
+                                "effect": "NoSchedule",
+                            }
+                        ],
+                    },
+                },
+                "limits": {"cpu": "512"},
+                "disruption": {
+                    "consolidateAfter": "Never",
+                    "budgets": [{"nodes": "0"}],
+                },
             },
-        })
+        }
+    )
+    return dump(pools)
+
+
+def gen_rbac():
+    return dump(
+        [
+            {
+                "apiVersion": "v1",
+                "kind": "ServiceAccount",
+                "metadata": {"name": "osb-sa", "namespace": "default"},
+            },
+            {
+                "apiVersion": "rbac.authorization.k8s.io/v1",
+                "kind": "Role",
+                "metadata": {"name": "osb-writer", "namespace": "default"},
+                "rules": [
+                    {
+                        "apiGroups": [""],
+                        "resources": ["configmaps"],
+                        "verbs": ["create", "update", "patch", "get"],
+                    }
+                ],
+            },
+            {
+                "apiVersion": "rbac.authorization.k8s.io/v1",
+                "kind": "RoleBinding",
+                "metadata": {"name": "osb-writer", "namespace": "default"},
+                "roleRef": {
+                    "apiGroup": "rbac.authorization.k8s.io",
+                    "kind": "Role",
+                    "name": "osb-writer",
+                },
+                "subjects": [
+                    {
+                        "kind": "ServiceAccount",
+                        "name": "osb-sa",
+                        "namespace": "default",
+                    }
+                ],
+            },
+        ]
+    )
+
+
+def gen_helm_values(p):
+    """Identical resource shape for every permutation. The ONLY thing that
+    differs between these files is which node pool the pods land on."""
+    return yaml.dump(
+        {
+            "clusterName": p["name"],
+            "nodeGroup": "master",
+            # The chart derives the StatefulSet, headless service and discovery
+            # seed hosts from clusterName-nodeGroup. Set masterService
+            # explicitly so the name used here, in run.sh and in the OSB
+            # --target-hosts can never drift apart again.
+            "masterService": svc_name(p),
+            "replicas": 3,
+            "roles": ["master", "ingest", "data", "remote_cluster_client"],
+            "resources": {"requests": {"memory": MEM_REQUEST, "cpu": CPU_REQUEST}},
+            "opensearchJavaOpts": f"-Xms{JVM_HEAP} -Xmx{JVM_HEAP}",
+            "persistence": {
+                "enabled": True,
+                "size": EBS["size"],
+                "storageClass": "bench-ebs",
+            },
+            "extraEnvs": [{"name": "DISABLE_SECURITY_PLUGIN", "value": "true"}],
+            "config": {
+                "opensearch.yml": (
+                    f"cluster.name: {p['name']}\n"
+                    "network.host: 0.0.0.0\n"
+                    "plugins.security.disabled: true\n"
+                    # Make the vectorised Lucene path explicit and identical on
+                    # both architectures, so an arm64/x86 JIT difference cannot
+                    # be misread as a CPU difference.
+                    "opensearch.experimental.feature.telemetry.enabled: false\n"
+                )
+            },
+            "nodeSelector": {"bench/perm": p["name"], "bench/role": "sut"},
+            # HARD, not soft: two data pods sharing a node would silently
+            # invalidate the permutation.
+            "antiAffinity": "hard",
+            "protocol": "http",
+            "sysctlInit": {"enabled": True},
+            "startupProbe": {
+                "tcpSocket": {"port": 9200},
+                "initialDelaySeconds": 30,
+                "periodSeconds": 10,
+                "failureThreshold": 60,
+            },
+        },
+        default_flow_style=False,
+        sort_keys=False,
+    )
+
+
+# Captures the facts needed to prove the two clusters were comparable: JVM
+# build, whether the Lucene Panama vector path is active, CPU model as the
+# kernel sees it, and the post-index doc count.
+PROBE_SCRIPT = r"""
+set -u
+ES="$1"; IDX="$2"; EXPECTED="$3"
+probe() { curl -s --max-time 30 "$ES/$1" 2>/dev/null || echo '{}'; }
+{
+  echo "=== _nodes jvm/os/plugins ==="
+  probe "_nodes/jvm,os,plugins?pretty"
+  echo "=== _nodes/settings (vector flags) ==="
+  probe "_nodes/settings?pretty" | grep -iE 'vector|simd|panama' || echo "(no vector flags reported)"
+  echo "=== doc count check ==="
+  CNT=$(probe "${IDX}/_count" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("count","ERR"))' 2>/dev/null || echo ERR)
+  echo "index=$IDX counted=$CNT expected=$EXPECTED"
+  if [ "$CNT" = "$EXPECTED" ]; then echo "DOCCOUNT_OK"; else echo "DOCCOUNT_MISMATCH"; fi
+  echo "=== cluster health ==="
+  probe "_cluster/health?pretty"
+} 2>&1
+"""
+
+
+def gen_osb_jobs(perms, workload_name, load_key, rep):
+    wl = WORKLOADS[workload_name]
+    level = LOAD_LEVELS[load_key]
+    docs = []
+
+    for p in perms:
+        run_id = f"{workload_name}-{load_key}-r{rep}-{p['name']}"
+        cm_name = f"osb-{run_id}"[:253]
+        svc = f"{svc_name(p)}.{p['namespace']}.svc.cluster.local"
+        es = f"http://{svc}:9200"
+
+        wp = {
+            "bulk_size": BULK_SIZE,
+            "number_of_replicas": REPLICAS,
+            "number_of_shards": SHARDS,
+            "search_clients": SEARCH_CLIENTS,
+            "bulk_indexing_clients": BULK_CLIENTS,
+        }
+        # Only set target_throughput for fixed-rate levels. For "saturate" we
+        # omit it entirely rather than passing an absurd number, so that the
+        # OSB log unambiguously shows an unthrottled schedule.
+        if level["kind"] == "fixed-rate":
+            wp["target_throughput"] = level["target_throughput"]
+        wp_str = ",".join(f"{k}:{v}" for k, v in wp.items())
+
+        osb_cmd = (
+            "opensearch-benchmark run"
+            " --pipeline=benchmark-only"
+            f" --workload={workload_name}"
+            f" --target-hosts={svc}:9200"
+            f" --distribution-version={OS_VERSION}"
+            f" --workload-params='{wp_str}'"
+            f" --test-procedure={wl['test_procedure']}"
+            " --client-options='timeout:120'"
+            " --results-format=csv"
+            " --results-file=/tmp/r.csv"
+            f" --user-tag='perm:{p['name']},cpu:{p['cpu']},load:{load_key},rep:{rep}'"
+            " --on-error=continue"
+        )
+
+        # Note: --on-error=continue is retained so a partial failure still
+        # yields data, but the error rate is extracted below and report.py
+        # marks any run above the threshold as INVALID rather than averaging
+        # it in. A run that silently drops bulk requests otherwise measures as
+        # "fast".
+        save_py = (
+            "import urllib.request,json,os,ssl\n"
+            "t=open('/var/run/secrets/kubernetes.io/serviceaccount/token').read()\n"
+            "ctx=ssl.create_default_context(cafile='/var/run/secrets/kubernetes.io/serviceaccount/ca.crt')\n"
+            "h=os.environ['KUBERNETES_SERVICE_HOST'];pt=os.environ['KUBERNETES_SERVICE_PORT']\n"
+            "def rd(p,n=200000):\n"
+            "    try:\n"
+            "        return open(p).read()[-n:]\n"
+            "    except Exception:\n"
+            "        return 'MISSING'\n"
+            "data={'csv':rd('/tmp/r.csv'),'log':rd('/tmp/osb.log',40000),"
+            "'probe':rd('/tmp/probe.txt',40000),'meta':rd('/tmp/meta.json')}\n"
+            f"cm={{'apiVersion':'v1','kind':'ConfigMap','metadata':{{'name':'{cm_name}',"
+            f"'namespace':'default','labels':{{'bench':'osb','workload':'{workload_name}',"
+            f"'load':'{load_key}','rep':'{rep}','perm':'{p['name']}'}}}},'data':data}}\n"
+            "body=json.dumps(cm).encode()\n"
+            "hdrs={'Authorization':'Bearer '+t,'Content-Type':'application/json'}\n"
+            "url='https://%s:%s/api/v1/namespaces/default/configmaps'%(h,pt)\n"
+            "try:\n"
+            "    urllib.request.urlopen(urllib.request.Request(url,data=body,method='POST',headers=hdrs),context=ctx)\n"
+            "except urllib.error.HTTPError:\n"
+            f"    urllib.request.urlopen(urllib.request.Request(url+'/{cm_name}',data=body,method='PUT',headers=hdrs),context=ctx)\n"
+            f"print('saved {cm_name}')\n"
+        )
+
+        meta = {
+            "run_id": run_id,
+            "perm": p["name"],
+            "instance_type": p["instance_type"],
+            "cpu": p["cpu"],
+            "microarchitecture": p["microarchitecture"],
+            "arch": p["arch"],
+            "vcpus": p["vcpus"],
+            "physical_cores": p["physical_cores"],
+            "threads_per_core": p["threads_per_core"],
+            "memory_gib": p["memory_gib"],
+            "usd_per_hour": p["usd_per_hour"],
+            "workload": workload_name,
+            "load_level": load_key,
+            "load_kind": level["kind"],
+            "target_throughput": level["target_throughput"],
+            "rep": rep,
+            "search_clients": SEARCH_CLIENTS,
+            "bulk_indexing_clients": BULK_CLIENTS,
+            "jvm_heap": JVM_HEAP,
+            "loadgen_type": LOADGEN_TYPE,
+        }
+
+        script = (
+            "set -u\n"
+            f"cat >/tmp/meta.json <<'META'\n{json.dumps(meta, indent=2)}\nMETA\n"
+            f"cat >/tmp/probe.sh <<'PROBE'\n{PROBE_SCRIPT}\nPROBE\n"
+            "echo '--- waiting for cluster yellow/green ---'\n"
+            f"for i in $(seq 1 120); do "
+            f"curl -s --max-time 10 '{es}/_cluster/health?wait_for_status=yellow&timeout=10s' "
+            "| grep -qE '\"status\":\"(yellow|green)\"' && break || sleep 10; done\n"
+            f"{osb_cmd} 2>&1 | tee /tmp/osb.log\n"
+            "OSB_RC=${PIPESTATUS[0]}\n"
+            'echo "osb_exit_code=$OSB_RC" >>/tmp/osb.log\n'
+            # Fail loudly if OSB silently ignored a workload param -- that is
+            # how a "fixed rate" run can end up unthrottled without anyone
+            # noticing.
+            "grep -iE 'could not find.*param|unused.*param|ignoring' /tmp/osb.log "
+            "&& echo 'PARAM_WARNING_PRESENT' >>/tmp/osb.log || true\n"
+            f"sh /tmp/probe.sh '{es}' '{wl['index']}' '{wl['docs']}' >/tmp/probe.txt 2>&1\n"
+            f"python3 - <<'SAVE'\n{save_py}\nSAVE\n"
+        )
+
+        docs.append(
+            {
+                "apiVersion": "batch/v1",
+                "kind": "Job",
+                "metadata": {
+                    "name": f"osb-{run_id}"[:63],
+                    "namespace": "default",
+                    "labels": {
+                        "bench": "osb",
+                        "workload": workload_name,
+                        "load": load_key,
+                        "rep": str(rep),
+                        "perm": p["name"],
+                    },
+                },
+                "spec": {
+                    # No retries: a retried run silently overwrites its own
+                    # result and we lose the fact that it failed once.
+                    "backoffLimit": 0,
+                    "ttlSecondsAfterFinished": 14400,
+                    "template": {
+                        "metadata": {
+                            "labels": {
+                                "bench": "osb",
+                                "workload": workload_name,
+                                "load": load_key,
+                                "rep": str(rep),
+                                "perm": p["name"],
+                            },
+                            "annotations": {"karpenter.sh/do-not-disrupt": "true"},
+                        },
+                        "spec": {
+                            "serviceAccountName": "osb-sa",
+                            # THE critical fix: load generator lives on its own
+                            # fixed-architecture node, never on the SUT.
+                            "nodeSelector": {"bench/role": "loadgen"},
+                            "tolerations": [
+                                {
+                                    "key": "bench/loadgen",
+                                    "operator": "Equal",
+                                    "value": "true",
+                                    "effect": "NoSchedule",
+                                }
+                            ],
+                            "restartPolicy": "Never",
+                            "containers": [
+                                {
+                                    "name": "osb",
+                                    "image": OSB_IMAGE,
+                                    "command": ["/bin/bash", "-c"],
+                                    "args": [script],
+                                    # Generous and identical: the generator must
+                                    # never be the bottleneck. 4 permutations
+                                    # share a 32-vCPU loadgen node.
+                                    "resources": {
+                                        "requests": {"cpu": "7", "memory": "12Gi"},
+                                        "limits": {"cpu": "7", "memory": "12Gi"},
+                                    },
+                                }
+                            ],
+                        },
+                    },
+                },
+            }
+        )
     return dump(docs)
+
 
 # ── Main ──────────────────────────────────────────────────────────────────
 
+
 def main():
-    perms = build_perms()
+    specs = load_specs()
+    perms = build_perms(specs)
+    reps = int(os.environ.get("BENCH_REPS", "5"))
+    load_keys = os.environ.get("BENCH_LOADS", ",".join(LOAD_LEVELS)).split(",")
+    workloads = os.environ.get("BENCH_WORKLOADS", "geonames").split()
+
+    for lk in load_keys:
+        if lk not in LOAD_LEVELS:
+            raise SystemExit(f"Unknown load level {lk!r}; known: {list(LOAD_LEVELS)}")
+    for w in workloads:
+        if w not in WORKLOADS:
+            raise SystemExit(f"Unknown workload {w!r}; known: {list(WORKLOADS)}")
 
     if OUT.exists():
         shutil.rmtree(OUT)
     OUT.mkdir(parents=True)
     (OUT / "opensearch").mkdir()
+    (OUT / "jobs").mkdir()
 
-    (OUT / "storageclasses.yaml").write_text(gen_storageclasses())
+    (OUT / "storageclass.yaml").write_text(gen_storageclass())
     (OUT / "nodepools.yaml").write_text(gen_nodepools(perms))
     (OUT / "rbac.yaml").write_text(gen_rbac())
 
     for p in perms:
         (OUT / "opensearch" / f"values-{p['name']}.yaml").write_text(gen_helm_values(p))
 
-    for wl_name in WORKLOADS:
-        (OUT / f"osb-jobs-{wl_name}.yaml").write_text(gen_osb_jobs(perms, wl_name))
+    n_jobs = 0
+    for w in workloads:
+        for lk in load_keys:
+            for rep in range(1, reps + 1):
+                path = OUT / "jobs" / f"{w}-{lk}-r{rep}.yaml"
+                path.write_text(gen_osb_jobs(perms, w, lk, rep))
+                n_jobs += len(perms)
 
-    config = {"instances": INSTANCES, "ebs_tiers": EBS_TIERS, "workloads": WORKLOADS,
-              "permutations": [p["name"] for p in perms], "perm_details": perms}
-    (OUT / "config.json").write_text(json.dumps(config, indent=2))
+    config = {
+        "region": specs["region"],
+        "size": SIZE,
+        "loadgen_type": LOADGEN_TYPE,
+        "reps": reps,
+        "load_levels": {k: LOAD_LEVELS[k] for k in load_keys},
+        "workloads": {w: WORKLOADS[w] for w in workloads},
+        "ebs": EBS,
+        "fixed": {
+            "jvm_heap": JVM_HEAP,
+            "mem_request": MEM_REQUEST,
+            "cpu_request": CPU_REQUEST,
+            "search_clients": SEARCH_CLIENTS,
+            "bulk_indexing_clients": BULK_CLIENTS,
+            "shards": SHARDS,
+            "replicas": REPLICAS,
+        },
+        "permutations": [p["name"] for p in perms],
+        "perm_details": {p["name"]: p for p in perms},
+    }
+    (OUT / "config.json").write_text(json.dumps(config, indent=2) + "\n")
 
-    print(f"Generated {len(perms)} permutations × {len(WORKLOADS)} workloads into {OUT}")
+    sut_cost = sum(p["usd_per_hour"] for p in perms) * 3
+    lg_cost = specs["instances"][LOADGEN_TYPE]["usd_per_hour"] * 3
+
+    print(f"Generated {len(perms)} clusters × {len(load_keys)} load levels × "
+          f"{reps} reps × {len(workloads)} workload(s) = {n_jobs} runs")
+    print(f"\n{'perm':<6} {'instance':<16} {'cpu':<22} {'vCPU':>5} {'cores':>6} "
+          f"{'t/c':>4} {'GiB':>5} {'$/hr':>8}")
     for p in perms:
-        print(f"  {p['name']:30s} {p['instance_type']:20s} {p['ebs_key']:12s} heap={p['jvm_heap']}")
-    print(f"\nWorkloads: {', '.join(WORKLOADS.keys())}")
+        print(f"{p['name']:<6} {p['instance_type']:<16} {p['cpu']:<22} "
+              f"{p['vcpus']:>5} {p['physical_cores']:>6} {p['threads_per_core']:>4} "
+              f"{p['memory_gib']:>5} {p['usd_per_hour']:>8.4f}")
+    print(f"\nFixed everywhere: heap={JVM_HEAP} search_clients={SEARCH_CLIENTS} "
+          f"bulk_clients={BULK_CLIENTS} loadgen={LOADGEN_TYPE}")
+    print(f"Load levels: {', '.join(load_keys)}")
+    print(f"Standing cost while provisioned: ${sut_cost:.2f}/hr SUT + "
+          f"${lg_cost:.2f}/hr loadgen = ${sut_cost + lg_cost:.2f}/hr")
+
 
 if __name__ == "__main__":
     main()

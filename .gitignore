@@ -1,11 +1,11 @@
 # Terraform
 .terraform/
+.terraform.lock.hcl
 *.tfstate
 *.tfstate.*
 *.tfvars
 !*.tfvars.example
 tfplan
-.terraform.lock.hcl
 
 # Python
 __pycache__/
@@ -13,13 +13,7 @@ __pycache__/
 *.pyo
 .venv/
 
-# Results (keep directory via .gitkeep)
-results/*.csv
-results/*.log
-results/*.json
-!results/.gitkeep
-
-# Generated k8s manifests
+# Generated k8s manifests (reproducible from specs.json + generate.py)
 k8s/generated/
 
 # Secrets
@@ -27,24 +21,17 @@ k8s/generated/
 *.key
 .env
 
-# OS
+# OS / editors
 .DS_Store
 Thumbs.db
-
-# Editors
 .idea/
 .vscode/
 *.swp
 *.swo
 *~
 
-# Node
-node_modules/
-dist/
-build/
-.terraform
-# Results (CSV/log files are large, only commit REPORT.md)
-results/**/*.csv
-results/**/*.log
-!results/REPORT.md
-!results/.gitkeep
+# NOTE: results/ is deliberately NOT ignored.
+# Raw OSB CSV, logs and probe output are committed so that every published
+# number can be audited -- error rates, doc-count verification, and whether the
+# workload parameters actually took effect. The previous revision ignored these
+# files, which made its report unverifiable.

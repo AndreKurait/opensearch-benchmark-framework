@@ -71,24 +71,41 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: pip install pyyaml
+        run: pip install pyyaml boto3
 
       - name: Python syntax check
-        run: python -m py_compile scripts/generate.py && python -m py_compile scripts/report.py
+        run: |
+          for f in scripts/*.py; do python -m py_compile "$f" && echo "ok $f"; done
 
-      - name: Generate manifests (dry run)
+      - name: Generate manifests (dry run, uses committed specs.json)
         run: python scripts/generate.py
 
       - name: Verify generated files exist
         run: |
           test -f k8s/generated/config.json
-          test -f k8s/generated/storageclasses.yaml
+          test -f k8s/generated/storageclass.yaml
           test -f k8s/generated/nodepools.yaml
           test -f k8s/generated/rbac.yaml
-          test -f k8s/generated/osb-jobs-geonames.yaml
-          test -f k8s/generated/osb-jobs-pmc.yaml
-          ls k8s/generated/opensearch/values-*.yaml | wc -l | grep -q 18
-          echo "All 18 permutations generated"
+          test -d k8s/generated/jobs
+          n=$(ls k8s/generated/opensearch/values-*.yaml | wc -l)
+          test "$n" -eq 9 || { echo "::error::expected 9 permutations, got $n"; exit 1; }
+          echo "9 permutations generated"
+
+      # These are the checks that stop a methodology regression from shipping a
+      # plausible-looking but invalid report. See docs/METHODOLOGY.md.
+      - name: Validate experiment invariants
+        run: python scripts/validate_manifests.py
+
+      - name: Assert no withdrawn claims reintroduced
+        run: |
+          if grep -rn 'Emerald Rapids' README.md docs/ scripts/ 2>/dev/null | grep -v 'UARCH\|withdrawn\|Granite\|previous\|labelled'; then
+            echo "::error::m8i/c8i/r8i are Granite Rapids, not Emerald Rapids"
+            exit 1
+          fi
+          if grep -rnE 'best 8th-gen (EBS-based )?instance family' README.md results/ 2>/dev/null | grep -v withdrawn; then
+            echo "::error::withdrawn headline claim reintroduced without evidence"
+            exit 1
+          fi
 
       - name: Verify no secrets in generated files
         run: |

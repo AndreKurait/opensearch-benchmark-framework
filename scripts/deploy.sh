@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Deploy one 3-node OpenSearch cluster per instance type, plus the shared,
+# architecture-fixed load-generator node pool.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -6,34 +8,88 @@ CONFIG="k8s/generated/config.json"
 [[ -f "$CONFIG" ]] || { echo "Run: python3 scripts/generate.py"; exit 1; }
 
 PERMS=$(jq -r '.permutations[]' "$CONFIG")
-COUNT=$(echo "$PERMS" | wc -l)
+COUNT=$(echo "$PERMS" | wc -l | tr -d ' ')
+LOADGEN=$(jq -r '.loadgen_type' "$CONFIG")
 
-echo "==> Deploying $COUNT OpenSearch clusters"
+echo "==> Deploying $COUNT OpenSearch clusters (load generator: $LOADGEN)"
 
-kubectl apply -f k8s/generated/storageclasses.yaml
+kubectl apply -f k8s/generated/storageclass.yaml
 kubectl apply -f k8s/generated/rbac.yaml
 kubectl apply -f k8s/generated/nodepools.yaml
 
-helm repo add opensearch https://opensearch-project.github.io/helm-charts/ 2>/dev/null || true
+helm repo add opensearch https://opensearch-project.github.io/helm-charts/ >/dev/null 2>&1 || true
 helm repo update opensearch 2>&1 | tail -1
 
 for pk in $PERMS; do
-  NS="os-${pk}"
-  kubectl create namespace "$NS" 2>/dev/null || true
+  kubectl create namespace "os-${pk}" >/dev/null 2>&1 || true
   helm upgrade --install opensearch opensearch/opensearch \
-    -n "$NS" --version 3.5.0 \
+    -n "os-${pk}" --version 3.5.0 \
     -f "k8s/generated/opensearch/values-${pk}.yaml" \
-    --wait=false &
+    --wait=false >/dev/null &
 done
 wait
-echo "==> Helm installs submitted. Karpenter provisioning nodes..."
+echo "==> Helm installs submitted; Karpenter is provisioning nodes"
 
-echo "==> Waiting for pods..."
-for i in $(seq 1 60); do
-  ready=$(kubectl get pods -A --no-headers 2>/dev/null | grep "os-" | grep -c "1/1.*Running" || true)
-  total=$((COUNT * 3))
-  echo "  [$(date -u '+%H:%M')] $ready/$total pods ready"
-  [[ $ready -ge $total ]] && break
+# Pre-warm the load-generator pool so the first benchmark cell is not waiting on
+# a cold node launch (and so a provisioning failure surfaces now, not in an hour).
+kubectl apply -f - >/dev/null <<'EOF'
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: loadgen-warm
+  namespace: default
+spec:
+  replicas: 3
+  selector:
+    matchLabels: {app: loadgen-warm}
+  template:
+    metadata:
+      labels: {app: loadgen-warm}
+    spec:
+      nodeSelector: {bench/role: loadgen}
+      tolerations:
+        - key: bench/loadgen
+          operator: Equal
+          value: "true"
+          effect: NoSchedule
+      containers:
+        - name: pause
+          image: public.ecr.aws/eks-distro/kubernetes/pause:3.9
+          resources:
+            requests: {cpu: "24", memory: "8Gi"}
+EOF
+
+echo "==> Waiting for $((COUNT * 3)) OpenSearch pods (this provisions $((COUNT * 3)) nodes)"
+TARGET=$((COUNT * 3))
+DEADLINE=$(( $(date +%s) + 2400 ))
+while true; do
+  ready=0
+  for pk in $PERMS; do
+    n=$(kubectl get pods -n "os-${pk}" --no-headers 2>/dev/null \
+        | grep -c '1/1 *Running' || true)
+    ready=$((ready + n))
+  done
+  lg=$(kubectl get nodes -l bench/role=loadgen --no-headers 2>/dev/null | wc -l | tr -d ' ')
+  echo "  [$(date -u '+%H:%M:%S')] opensearch pods ready: $ready/$TARGET | loadgen nodes: $lg"
+  [[ "$ready" -ge "$TARGET" ]] && break
+  if (( $(date +%s) > DEADLINE )); then
+    echo "  !! timed out waiting for pods; showing pending pods:"
+    kubectl get pods -A --field-selector=status.phase=Pending --no-headers 2>/dev/null | head -20
+    exit 1
+  fi
   sleep 30
 done
+
+echo "==> Waiting for cluster health on each permutation"
+for pk in $PERMS; do
+  for _ in $(seq 1 60); do
+    s=$(kubectl exec -n "os-${pk}" "${pk}-master-0" -- \
+        curl -s --max-time 10 'http://localhost:9200/_cluster/health' 2>/dev/null \
+        | jq -r '.status' 2>/dev/null || echo "")
+    [[ "$s" == "green" || "$s" == "yellow" ]] && break
+    sleep 10
+  done
+  echo "  $pk: ${s:-unknown}"
+done
+
 echo "==> Deploy complete"

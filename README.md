@@ -1,132 +1,171 @@
 # OpenSearch Benchmark Framework
 
-Automated price-performance benchmarking of OpenSearch on EKS across multiple EC2 instance types and EBS configurations.
+Controlled price-performance comparison of OpenSearch 3.5 across 8th-generation
+EC2 CPU architectures (AWS Graviton4, AMD Turin, Intel Granite Rapids) on EKS.
 
-## Latest Results
+## Status
 
-**AMD Turin (m8a/c8a/r8a) appears to be the best 8th-gen EBS-based instance family for OpenSearch workloads** — delivering 37% faster indexing, 25% higher search QPS, and 32% lower p50 search latency than Graviton4 at only 9-12% higher cost, while being both faster and 6% cheaper than Intel Emerald Rapids across all instance families tested (m/c/r).
+The framework has been rebuilt to fix methodology errors that invalidated the
+previous published results. **The old `results/REPORT.md` conclusion — "AMD Turin
+is the best 8th-gen instance family for OpenSearch" — has been withdrawn.** It
+did not survive review:
 
-👉 **[Full benchmark report](results/REPORT.md)**
+* Its cost figures were hardcoded, 30–49% below list price, and **wrong in
+  ordering**. Turin is not 9–12% more expensive than Graviton4, it is ~35%
+  more expensive; and it is not 6% cheaper than Intel, it is ~15% more
+  expensive. A 37% indexing win at a 35% price premium is roughly a wash, and
+  the search-throughput claim goes negative on price-performance.
+* It labelled the Intel parts "Emerald Rapids". `m8i`/`c8i`/`r8i` are **Granite
+  Rapids** (Xeon 6) — a generation out.
+* Every comparison was **n=1**, while its own data implies run-to-run variance
+  around ±100% — larger than any effect it reported.
+* The load generator ran **on the machine under test**, so a slower-per-core CPU
+  also slowed the measuring instrument.
+* Concurrency was tied to instance family, confounding it with heap size and
+  RAM, and holding the whole matrix at an occupancy far too low to saturate the
+  cluster.
+* Its committed manifests pointed OSB at a **service name the Helm chart never
+  created**, so the published results are not reproducible from the code.
+
+See [docs/METHODOLOGY.md](docs/METHODOLOGY.md) for the full list and the design
+rules that now prevent each one. New results will be published once the
+rebuilt matrix has been run.
+
+## What it measures
+
+**Instance types:** `m8g` `m8a` `m8i` `c8g` `c8a` `c8i` `r8g` `r8a` `r8i`,
+default size `8xlarge` (32 vCPU — avoids the burstable EBS allocations that make
+`2xlarge` results noisy).
+
+**Load axis:** offered search throughput at 500 / 2000 / 8000 ops/s plus an
+unthrottled `saturate` level. Client counts are fixed at 64 search / 32 bulk for
+every instance type, so concurrency is varied independently of instance family.
+
+**Controlled identically everywhere:** JVM heap (26 GiB), CPU request, client
+counts, shard/replica counts, storage tier, and the load-generator instance type.
+
+**Reported:** medians over 5 repetitions with interquartile ranges. A difference
+is only stated as a percentage when the IQRs do not overlap.
+
+> ### Read this before quoting a number
+> At equal vCPU count the vendors do not give you equal hardware. Graviton4 and
+> AMD Turin 8th-gen instances ship with **SMT disabled** (1 vCPU = 1 physical
+> core). Intel 8th-gen instances ship with **SMT enabled** (1 vCPU = 1 thread,
+> so half the physical cores for the same vCPU count). Graviton-vs-Turin is a
+> clean per-core comparison; anything involving Intel is not. The report prints
+> a `physical cores` column for this reason.
 
 ## Architecture
 
 ```
 EKS Auto Mode (Karpenter built-in)
-├── 18 NodePools (9 instance types × 2 EBS tiers)
-├── 18 OpenSearch clusters (3-node each, 54 nodes total)
-├── 18 OSB Jobs (parallel, results → ConfigMaps)
-└── Auto-teardown (nodes terminate when idle)
+├── 9 SUT NodePools (one per instance type, 3 nodes each)
+├── 1 loadgen NodePool  (fixed instance type, tainted, never runs OpenSearch)
+├── 9 OpenSearch clusters (3-node each, identical config)
+├── OSB Jobs on the loadgen pool (results → ConfigMaps)
+└── Auto-teardown (nodes terminate when workloads are removed)
 ```
 
-**Instance types:** m8g, m8a, m8i, c8g, c8a, c8i, r8g, r8a, r8i (all .2xlarge)
-**EBS tiers:** gp3-default (125 MB/s, 3K IOPS) vs gp3-fast (1 GB/s, 10K IOPS)
-**Workload:** OSB 2.1 geonames (11.4M docs, full query suite, no rate limiting)
-
-## Quick Start
+## Quick start
 
 ```bash
-# Prerequisites: AWS CLI configured, Terraform >= 1.5, kubectl, helm, python3, pyyaml, jq
-pip install pyyaml
+# Prerequisites: AWS creds, Terraform >= 1.5, kubectl, helm, jq, python3
+pip install pyyaml boto3
 
-# Clone and run everything (provision → deploy → benchmark → report → teardown)
 git clone https://github.com/AndreKurait/opensearch-benchmark-framework.git
 cd opensearch-benchmark-framework
-bash scripts/run-all.sh
 
-# Or step by step with options:
-bash scripts/run-all.sh --skip-teardown                    # keep cluster running
-bash scripts/run-all.sh --workloads "geonames pmc"         # specific workloads only
-bash scripts/run-all.sh --skip-infra --workloads "pmc"     # reuse existing cluster
+# Shows a cost estimate and prompts before spending anything
+bash scripts/run-all.sh
 ```
 
-### Step-by-step (manual)
+### Controlling matrix size
+
+Cost scales with load levels × repetitions (cells run sequentially; all nine
+instance types run in parallel within a cell). Check before you commit to a run:
 
 ```bash
-# 1. Create EKS cluster (~10 min)
-cd terraform
-cp terraform.tfvars.example terraform.tfvars  # edit region/name if needed
-terraform init && terraform apply
-eval "$(terraform output -raw kubeconfig_cmd)"
-cd ..
-
-# 2. Generate manifests & deploy (~5 min)
-python3 scripts/generate.py
-bash scripts/deploy.sh
-
-# 3. Run workloads (each ~30-45 min, all 18 permutations in parallel)
-bash scripts/run.sh geonames && bash scripts/collect.sh geonames
-bash scripts/run.sh pmc      && bash scripts/collect.sh pmc
-
-# 4. Tear down
-bash scripts/teardown.sh
-cd terraform && terraform destroy
+python3 scripts/fetch_specs.py && python3 scripts/generate.py && python3 scripts/estimate.py
 ```
 
-## Customization
+```bash
+# Pilot: validate the harness end to end, one load level, 2 reps
+BENCH_REPS=2 BENCH_LOADS=saturate bash scripts/run-all.sh
 
-Edit `scripts/generate.py` to modify:
+# Full: 4 load levels, 5 reps
+BENCH_REPS=5 bash scripts/run-all.sh
+
+# Cheap smoke test on burstable instances (NOT publication quality)
+BENCH_SIZE=2xlarge BENCH_REPS=2 BENCH_LOADS=saturate bash scripts/run-all.sh
+```
+
+Environment variables: `BENCH_SIZE`, `BENCH_REPS`, `BENCH_LOADS`,
+`BENCH_WORKLOADS`, `BENCH_LOADGEN_TYPE`, `OSB_IMAGE`.
+
+### Step by step
+
+```bash
+python3 scripts/fetch_specs.py --region us-east-1   # prices + core counts from AWS APIs
+python3 scripts/generate.py                         # manifests
+python3 scripts/estimate.py                         # cost/time estimate
+cd terraform && terraform init && terraform apply && cd ..
+eval "$(cd terraform && terraform output -raw kubeconfig_cmd)"
+bash scripts/deploy.sh                              # 9 clusters + loadgen pool
+bash scripts/run.sh geonames                        # all load levels × reps
+python3 scripts/report.py                           # results/REPORT.md
+bash scripts/teardown.sh && cd terraform && terraform destroy
+```
+
+## Customisation
+
+Edit the axes at the top of `scripts/generate.py`:
 
 ```python
-# Add/remove instance types
-INSTANCES = {
-    "m8a": {"type": "m8a.2xlarge", "cpu": "AMD Turin", ...},
-    # Add your own:
-    "m8a4xl": {"type": "m8a.4xlarge", "cpu": "AMD Turin", ...},
-}
+FAMILY_KEYS = ["m8g", "m8a", "m8i", "c8g", "c8a", "c8i", "r8g", "r8a", "r8i"]
+SIZE = "8xlarge"
+LOADGEN_TYPE = "c8i.8xlarge"        # fixed for the whole matrix, on purpose
 
-# Add/remove EBS tiers
-EBS_TIERS = {
-    "gp3-default": {"throughput": 125, "iops": 3000, "size": "100Gi"},
-    "gp3-fast":    {"throughput": 1000, "iops": 10000, "size": "100Gi"},
-    # Add your own:
-    "io2-high":    {"throughput": 1000, "iops": 64000, "size": "100Gi"},
+LOAD_LEVELS = {
+    "load-500":  {"target_throughput": 500,  "kind": "fixed-rate"},
+    "saturate":  {"target_throughput": 0,    "kind": "saturate"},
 }
-
-# Change OSB image (e.g., to use ECR mirror)
-export OSB_IMAGE=your-ecr-uri/osb:latest
 ```
 
-Then regenerate: `python3 scripts/generate.py`
+Adding an instance type requires it to be present in `specs.json` — re-run
+`fetch_specs.py` after editing `FAMILIES` there. Prices are never hardcoded.
 
-## How It Works
-
-1. **EKS Auto Mode** provides Karpenter out of the box — no manual node group management
-2. **One NodePool per permutation** with `do-not-disrupt` ensures nodes stay alive during benchmarks
-3. **OpenSearch deployed via Helm** with per-family JVM tuning (c=2GB, m=4GB, r=8GB)
-4. **OSB runs as K8s Jobs** on the benchmark nodes themselves — no port-forwarding
-5. **Results saved to ConfigMaps** via K8s API from within the pod — no log scraping race conditions
-6. **`target_throughput: 10000`** removes OSB's default rate limiting for true max-throughput measurement
-7. **`search_clients` scaled per family** (c=2, m=4, r=8) to match available heap
-
-## Project Structure
+## Project structure
 
 ```
-├── terraform/              # EKS Auto Mode cluster
-│   ├── main.tf
-│   ├── variables.tf
-│   └── terraform.tfvars.example
+├── terraform/                  # EKS Auto Mode cluster
 ├── scripts/
-│   ├── generate.py         # Generates K8s manifests from permutation config
-│   ├── report.py           # Parses OSB CSV → REPORT.md
-│   ├── deploy.sh           # Deploy all clusters
-│   ├── run.sh              # Run all benchmarks
-│   ├── collect.sh          # Collect results
-│   └── teardown.sh         # Tear down everything
-├── k8s/generated/          # Generated manifests (gitignored)
-├── results/                # Benchmark results (gitignored)
-└── .github/workflows/ci.yml  # CI: secrets scan + lint + validate
+│   ├── fetch_specs.py          # AWS Pricing + DescribeInstanceTypes → specs.json
+│   ├── generate.py             # permutation config → K8s manifests
+│   ├── estimate.py             # cost / wall-clock estimate
+│   ├── deploy.sh               # 9 clusters + loadgen pool
+│   ├── run.sh                  # all load levels × reps, checkpointed
+│   ├── collect.sh              # one cell → results/ raw artifacts
+│   ├── report.py               # raw results → REPORT.md with IQRs
+│   └── teardown.sh
+├── specs.json                  # committed API-derived specs (auditable)
+├── docs/METHODOLOGY.md         # what this measures, and what it doesn't
+├── results/                    # RAW CSV/log/probe output IS committed
+└── k8s/generated/              # generated manifests (gitignored)
 ```
-
-## CI/CD
-
-GitHub Actions runs on every push/PR:
-- **Secrets scan** — checks for AWS account IDs, resource IDs, ARNs, access keys, private IPs
-- **Lint** — Python syntax, shell syntax, Terraform validate
-- **Dry run** — generates all 18 permutations and verifies output
 
 ## Cost
 
-Running all 18 permutations (54 nodes) for ~1 hour costs approximately $15-20. Nodes auto-terminate via Karpenter when workloads are removed.
+Depends entirely on matrix size; `scripts/estimate.py` prints the figure for your
+configuration before anything is provisioned. Cells run sequentially, so wall
+clock and cost scale with `load levels × repetitions`, not with instance count.
+`run-all.sh` requires explicit confirmation before provisioning.
+
+## CI
+
+GitHub Actions on every push/PR: secrets scan, Python/shell/Terraform lint, and
+a dry-run that generates the full matrix and asserts the invariants that matter
+(load generator is tainted off the SUT, client counts and heap are identical
+across permutations, no prices hardcoded outside `specs.json`).
 
 ## License
 
