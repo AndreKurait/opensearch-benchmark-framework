@@ -1,0 +1,33 @@
+{
+  "region": "eu-central-1",
+  "az": "eu-central-1a",
+  "size": "8xlarge",
+  "loadgen_type": "c8i.8xlarge",
+  "rep": "eu-central-1",
+  "ebs": {
+    "throughput": 1000,
+    "iops": 16000,
+    "size": "200Gi",
+    "type": "gp3"
+  },
+  "fixed": {
+    "jvm_heap": "26g",
+    "mem_request": "32Gi",
+    "cpu_request": "28",
+    "search_clients": 64,
+    "bulk_indexing_clients": 32,
+    "shards": 3,
+    "replicas": 1
+  },
+  "prices": {
+    "m8g": 1.72064,
+    "m8a": 2.3328,
+    "m8i": 2.02864,
+    "c8g": 1.4512,
+    "c8a": 1.96784,
+    "c8i": 1.71104,
+    "r8g": 2.27392,
+    "r8a": 3.08352,
+    "r8i": 2.68128
+  }
+}
