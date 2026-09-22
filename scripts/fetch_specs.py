@@ -245,6 +245,9 @@ def main():
     ap.add_argument("--size", default="8xlarge",
                     help="benchmark instance size, for the usability check")
     ap.add_argument("--out", default=str(ROOT / "specs.json"))
+    ap.add_argument("--merge", action="store_true",
+                    help="merge into an existing specs.json instead of replacing "
+                         "it; required when BENCH_FAMILIES is a partial matrix")
     args = ap.parse_args()
 
     types = sorted({f"{f}.{s}" for f in FAMILIES for s in SIZES} | set(EXTRA))
@@ -270,7 +273,33 @@ def main():
         "bench_size": args.size,
         "regions": regions,
     }
-    Path(args.out).write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+    # --merge is required when fetching a PARTIAL family set. A plain overwrite
+    # would replace specs.json with only the families just fetched, and report.py
+    # reads prices and core counts from it for every permutation already
+    # collected -- so fetching 9g on its own would silently strip the 8th-gen
+    # price table out from under finished results. Merge is per-instance-type,
+    # deeper than a region-level update, because a 9g fetch also touches regions
+    # that already carry 8g data.
+    out_path = Path(args.out)
+    if args.merge and out_path.exists():
+        prev = json.loads(out_path.read_text())
+        merged = prev.get("regions", {})
+        for rg, blob in regions.items():
+            if rg in merged:
+                merged[rg].setdefault("instances", {}).update(blob.get("instances", {}))
+                # Non-instance region metadata (AZ lists, quota, usability) is
+                # recomputed for the family set just fetched, so keep both under
+                # distinct keys rather than letting the narrower run win.
+                for k, v in blob.items():
+                    if k != "instances":
+                        merged[rg][k] = v
+            else:
+                merged[rg] = blob
+        payload["regions"] = merged
+        payload["source"] += " (merged)"
+
+    out_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
     usable = [rg for rg, b in regions.items() if b["usable_as_repetition"]]
     print(f"Wrote {args.out}: {len(regions)} regions, {len(usable)} usable as "

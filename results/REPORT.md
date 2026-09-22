@@ -1,6 +1,6 @@
 # OpenSearch 3.5 — 8th-Gen EC2 CPU Architecture Benchmark
 
-**Generated:** 2026-09-22 21:00 UTC  
+**Generated:** 2026-09-22 21:01 UTC  
 **Instance size:** `8xlarge` | **Load generator:** `c8i.8xlarge` (fixed everywhere)  
 **Repetitions:** 7, one per region | **Tool:** OpenSearch Benchmark | **OpenSearch:** 3.5.0 | **EKS Auto Mode + Karpenter**
 
@@ -241,4 +241,4 @@ All collected runs passed validity checks (error rate ≤ 0.1%, doc counts verif
 
 `doc count unverified (probe could not reach cluster)` means the in-pod probe failed, not that the data is wrong: the opensearch-benchmark image ships no `curl`, so every probe request returned empty. Doc counts for these runs were instead verified out-of-band directly against each cluster, and came back identical (11,396,503 documents, 3/3 shards successful) on Graviton, AMD and Intel alike. The probe is fixed for subsequent runs.
 
-*Generated 2026-09-22 21:00 UTC — [opensearch-benchmark-framework](https://github.com/AndreKurait/opensearch-benchmark-framework)*
+*Generated 2026-09-22 21:01 UTC — [opensearch-benchmark-framework](https://github.com/AndreKurait/opensearch-benchmark-framework)*
