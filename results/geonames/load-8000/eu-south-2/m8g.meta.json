@@ -1,0 +1,22 @@
+{
+  "run_id": "geonames-load-8000-m8g",
+  "perm": "m8g",
+  "instance_type": "m8g.8xlarge",
+  "cpu": "Graviton4",
+  "microarchitecture": "Neoverse V2",
+  "arch": "arm64",
+  "vcpus": 32,
+  "physical_cores": 32,
+  "threads_per_core": 1,
+  "memory_gib": 128,
+  "usd_per_hour": 1.59968,
+  "workload": "geonames",
+  "load_level": "load-8000",
+  "load_kind": "fixed-rate",
+  "target_throughput": 8000,
+  "rep": "eu-south-2",
+  "search_clients": 64,
+  "bulk_indexing_clients": 32,
+  "jvm_heap": "26g",
+  "loadgen_type": "c8i.8xlarge"
+}
