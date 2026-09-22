@@ -41,3 +41,14 @@ Thumbs.db
 # number can be audited -- error rates, doc-count verification, and whether the
 # workload parameters actually took effect. The previous revision ignored these
 # files, which made its report unverifiable.
+
+# Unrelated repo that exists inside this working dir; never ours to commit.
+wt-base/
+base/
+
+# Stray build/probe artefacts from other work in this directory.
+*.log
+ca.cnf
+probe/
+libtest/
+ca/

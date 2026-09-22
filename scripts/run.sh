@@ -61,13 +61,18 @@ for LOAD in $LOADS; do
 
   DEADLINE=$(( $(date +%s) + 10800 ))   # 3h ceiling per cell
   while true; do
+    # Default every counter to 0 if kubectl fails. An empty string on the left of
+    # -ge is a fatal "integer expression expected" under set -e, which would kill
+    # a healthy 3h run over one transient API-server blip.
     cms=$(kubectl get cm -n default -l "workload=$WORKLOAD,load=$LOAD" \
           --no-headers 2>/dev/null | wc -l | tr -d ' ')
+    cms=${cms:-0}
     failed=$(kubectl get jobs -n default -l "workload=$WORKLOAD,load=$LOAD" \
           -o jsonpath='{range .items[*]}{.status.failed}{"\n"}{end}' 2>/dev/null \
           | grep -c '^[1-9]' || true)
     running=$(kubectl get pods -n default -l "workload=$WORKLOAD,load=$LOAD" \
           --no-headers 2>/dev/null | grep -c Running || true)
+    failed=${failed:-0}; running=${running:-0}
     echo "    [$REGION $(date -u '+%H:%M:%S')] results:$cms/$COUNT running:$running failed:$failed"
     [[ "$cms" -ge "$COUNT" ]] && break
     if (( $(date +%s) > DEADLINE )); then

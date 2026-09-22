@@ -44,6 +44,26 @@ kubectl delete -f "${GEN}"/nodepools.yaml --ignore-not-found >/dev/null 2>&1 || 
 kubectl delete -f "${GEN}"/storageclass.yaml --ignore-not-found >/dev/null 2>&1 || true
 kubectl delete -f "${GEN}"/rbac.yaml --ignore-not-found >/dev/null 2>&1 || true
 
+# The EBS CSI driver creates the StatefulSet volumes, so terraform has no record
+# of them and `terraform destroy` leaves them behind. The first multi-region run
+# orphaned ~21 TiB of gp3 this way (~$2.40/hr) which nothing would ever have
+# reclaimed. Sweep them explicitly, scoped by the cluster ownership tag so this
+# can only ever touch volumes this run created.
+CLUSTER="osb-bench-${REGION}"
+echo "==> Sweeping orphaned EBS volumes tagged to ${CLUSTER}"
+orphans=$(aws ec2 describe-volumes --region "$REGION" \
+  --filters "Name=tag-key,Values=kubernetes.io/cluster/${CLUSTER}" "Name=status,Values=available" \
+  --query 'Volumes[].VolumeId' --output text 2>/dev/null || true)
+if [[ -n "${orphans// /}" ]]; then
+  for vol in $orphans; do
+    echo "  deleting $vol"
+    aws ec2 delete-volume --region "$REGION" --volume-id "$vol" >/dev/null 2>&1 \
+      || echo "  !! could not delete $vol -- check manually"
+  done
+else
+  echo "  none found"
+fi
+
 echo "==> [$REGION] Benchmark resources removed."
 echo "    Results are preserved in results/ (committed to git)."
 echo "    To remove the EKS cluster and VPC:  cd terraform && terraform destroy"
