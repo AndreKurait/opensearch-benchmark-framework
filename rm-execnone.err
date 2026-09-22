@@ -1,0 +1,4 @@
+trust: no run CA named (RM_CA_BUNDLE/AWS_CA_BUNDLE/REQUESTS_CA_BUNDLE unset)
+       -- using the image's shipped trust stores only. Outside a harness run this is expected;
+       inside one it means intercepted TLS WILL fail.
+error: exec needs a command

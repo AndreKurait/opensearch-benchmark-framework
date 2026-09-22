@@ -169,7 +169,17 @@ def fmt_ms(s):
     if not s:
         return "—"
     v, lo, hi = s["median"], s["p25"], s["p75"]
-    unit = (lambda x: f"{x/1000:.2f}s") if v >= 1000 else (lambda x: f"{x:.0f}ms")
+    # Scale precision to magnitude. Rounding to whole milliseconds printed every
+    # sub-2ms query as "1ms" or "2ms", which erased the differences the whole
+    # comparison exists to measure (term/phrase/match-all all land in 1.1-2.2ms).
+    if v >= 1000:
+        unit = lambda x: f"{x/1000:.2f}s"
+    elif v >= 100:
+        unit = lambda x: f"{x:.0f}ms"
+    elif v >= 10:
+        unit = lambda x: f"{x:.1f}ms"
+    else:
+        unit = lambda x: f"{x:.3f}ms"
     return f"{unit(v)} [{unit(lo)}–{unit(hi)}]"
 
 

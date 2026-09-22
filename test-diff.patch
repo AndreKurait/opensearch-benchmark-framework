@@ -1,0 +1,707 @@
+diff --git a/tests/integration/test_rm_legos_joint_live.py b/tests/integration/test_rm_legos_joint_live.py
+index c868b73..5107aea 100644
+--- a/tests/integration/test_rm_legos_joint_live.py
++++ b/tests/integration/test_rm_legos_joint_live.py
+@@ -31,10 +31,11 @@ WHAT THIS FILE PROVES, in the order the tests run:
+   4. **RM's SWF responsibilities** (R1–R3 in the matrix): the domain, the two workflow types and the 39 activity
+      types Legos' caller registers, with the timeouts and task lists RM's own code declares — read back out of
+      the emulator, not out of RM's logs.
+-  5. **Legos' CreateResources responsibilities** (L1–L3, L6): the VPC brick it builds, the two security groups
+-     it computes, the rows it writes to its own `ResourceStore`, its in-progress lock, and the ordered teardown
+-     that returns the store to empty. Every one of these is asserted against emulator state or Legos' own
+-     persistence — never against the RPC's return value, which a stand-in could fabricate.
++  5. **Legos' CreateResources responsibilities** (L1–L3, L6): the VPC brick it builds — including, since G12
++     closed, one subnet per availability zone — the two security groups it computes, the rows it writes to its
++     own `ResourceStore`, its in-progress lock, and the ordered teardown that returns the store to empty. Every
++     one of these is asserted against emulator state or Legos' own persistence — never against the RPC's return
++     value, which a stand-in could fabricate.
+ 
+ WHAT IT DELIBERATELY DOES **NOT** PROVE — the bound on every claim above, restated here because a reader who
+ misses it will over-claim (the same list is the status column of the matrix doc):
+@@ -46,17 +47,24 @@ misses it will over-claim (the same list is the status column of the matrix doc)
+     mock changes, so the bound cannot go stale silently.
+   * **Nothing about RM's decider or its FSM.** No `cs-domain-manager-wf` execution has ever existed in this
+     run, because the internal Config Service — the only production caller of `StartWorkflowExecution` for that
+-    workflow type — is not onboarded. That gap is PROVEN, not assumed, by
++    workflow type — is STOOD IN rather than onboarded, and the stand-in refuses `CreateDomainInstance` (501)
++    instead of acknowledging a write it could not perform. That gap is PROVEN, not assumed, by
+     `test_no_domain_manager_workflow_execution_exists_...`, and the responsibilities behind it are the strict
+     ``xfail``s further down.
+-  * **Nothing about the async/frontend subsystem** (ALB, target groups, VPC endpoints). The ARS mock removes
+-    the sole `@Named("TUMBLER_SP")` binding, so Guice cannot construct `AsyncTaskManager` and Legos' `main()`
+-    aborts one second after Bobcat starts listening. Every fact this file measures comes from a
+-    half-initialized JVM — a state production cannot reach.
+-  * **Nothing about the data plane.** `createSubnetsIfRequired` still fails — now on a NullPointerException in
+-    `filterAZinNetworkBorder`, because this emulator reports no `NetworkBorderGroup` — so the domain VPC has no
+-    subnets, and with no subnets there is no `VPCZoneIdentifier`, no auto scaling group and no EC2 instance.
+-    RM's own `vpc.legos_create` would reject this result after the RPC returned (`reject_on_empty_result=True`).
++  * **Nothing about the async/frontend subsystem** (ALB, target groups, VPC endpoints). Nothing submits an
++    `upsertFrontend` task, because the only caller is RM's `create-domain-instance` activity and no SWF
++    execution exists (G2). And Legos' `main()` still aborts one second after Bobcat starts listening — no
++    longer on the `@Named("TUMBLER_SP")` binding the ARS mock used to remove (it now provides it) but on G9,
++    `DeleteVpcEndpointBaseActivity`'s unqualified `Map<String, String>` at
++    `SearchServicesLegosService.java:89`. Every fact this file measures still comes from a half-initialized JVM
++    — a state production cannot reach — so nothing here may claim anything about throttling admission, dynamic
++    config, graceful shutdown or emitted metrics.
++  * **Nothing about the data plane past the network.** The domain VPC now HAS its subnets (one per AZ, G12
++    closed by the emulator reporting a `NetworkBorderGroup`), so `VPCZoneIdentifier` has ids to use — but
++    nothing calls `CreateNodeGroup`, so there is still no launch template, no auto scaling group and no EC2
++    instance. What RM does with the subnets (`vpc.legos_create` re-describes them with
++    `reject_on_empty_result=True`) is likewise unexercised: that code path runs inside the activity G2
++    withholds.
+   * **Nothing about cell selection, cross-account role assumption, the real Config Service contract, secondary
+     -index queries, or any feature-flagged path.** All are fabricated or disabled; see the matrix doc.
+ 
+@@ -70,11 +78,15 @@ AWS SDK adds its own backoff to any 400 it sees, so a failing attempt was measur
+ attempts at over two minutes. The state assertions therefore POLL: resources appear while the RPC is still in
+ flight, and a test that queries immediately sees nothing.
+ """
++import gzip
++import io
+ import json
+ import os
+ import re
+ import subprocess
+ import time
++import zlib
++from http.client import HTTPResponse
+ from pathlib import Path
+ 
+ import pytest
+@@ -501,30 +513,67 @@ def _store_rows(domain_ident=None):
+     return rows
+ 
+ 
++#: The resource kinds whose stored `ResourceArn` is the ARN **AWS** minted rather than one Legos composed. Read
++#: out of Legos' own code, not guessed: `SubnetOperations` stores `Arn.fromString(subnet.getSubnetArn())` at its
++#: `saveCreatedSubnetArn` call site, while `VPCOperations`, `RouteTableOperations` and `SecurityGroupOperations`
++#: all store `ArnHelper.constructArn(cellId, <type>, <id>)`. See `_arn_parts` and G13 in the persistence test.
++AWS_MINTED_ARN_TYPES = {"subnet"}
++
++
+ def _arn_parts(arn):
+-    """`arn:<partition>:<service>:<region>:<account-position>:<resource>` split into its six fields. Legos'
+-    `Resource.type` IS the ARN's service field (which is why RM's `get_resource_id(list, 'vpc')` works), and its
+-    account position carries the CELL id, so both are asserted by name rather than by index arithmetic."""
++    """`arn:<partition>:<service>:<region>:<account-position>:<resource>` split into its six fields.
++
++    THERE IS NO SINGLE SHAPE HERE, and assuming one is how a real defect gets read as a test failure (or worse,
++    the reverse). Legos stores TWO shapes, per resource kind — measured, and traced to the code that mints each:
++
++      * **LEGOS-MINTED** — `vpc`, `internet-gateway`, `route-table`, `security-group`.
++        `ArnHelper.constructArn(cellId, resourceType, resourceId)` builds
++        `arn:aws:<resourceType>:<region>:<cellId>:<bare id>`: the SERVICE field is the resource TYPE, the account
++        position carries the CELL id, and the resource is a bare id.
++      * **AWS-MINTED** — `subnet` (`AWS_MINTED_ARN_TYPES`), and the same pattern in `AlbOperations` for the load
++        balancer and target group. The ARN the AWS API itself returned, stored verbatim:
++        `arn:aws:ec2:<region>:<the account EC2 answered with>:subnet/<id>`. The service field is the AWS SERVICE,
++        the account is a real account id, and the resource carries a `<type>/` prefix.
++
++    So `parts["resource"]` is not always an id — use `_resource_id` when an id is what is wanted."""
+     fields = arn.split(":", 5)
+     assert len(fields) == 6, f"not a 6-field ARN: {arn!r}"
+     return {"partition": fields[1], "service": fields[2], "region": fields[3],
+             "account": fields[4], "resource": fields[5]}
+ 
+ 
++def _resource_id(arn):
++    """The bare resource id out of an ARN of EITHER shape: the last `/`-separated segment of the resource field —
++    the whole field for a Legos-minted ARN, and the part after `subnet/` for an AWS-minted one.
++
++    A named helper because this is precisely the step RM's own `legos_helper.get_resource_id` does NOT take: it
++    returns `arn.split(':')[-1]`, which is an id for Legos' own shape and `subnet/subnet-0123…` for AWS'. That
++    asymmetry is G13, recorded in the persistence test's docstring."""
++    return _arn_parts(arn)["resource"].rsplit("/", 1)[-1]
++
++
+ def _rm_sibling_processes():
+-    """Containers on the run network running RM's image with a command OTHER than RM's manifest command.
++    """Containers on the run network running RM's image with a command the manifest does NOT declare.
+ 
+-    This is how the ACTIVITY WORKER is found. It is not part of the fleet and cannot be: one service name maps
+-    to one container, and a real domain-create needs RM's decider and its activity poller at once, so
+-    profiles/rm-legos.yaml runs the decider and records that the second process is started ALONGSIDE the run.
+-    Discovered by image+command rather than by a container name so the operator may call it anything."""
++    An UNDECLARED sibling, i.e. something a human started by hand next to the fleet. It used to be how the
++    ACTIVITY WORKER was found, back when one service name meant one container and the poller had to be launched
++    alongside the run. RM now declares BOTH of its processes as `container.roles`, so the poller is part of the
++    fleet and is NOT a sibling — which is why the comparison is against the set of every role's command rather
++    than against a single `container.command` (a key that no longer exists; reading it raised `KeyError:
++    'command'` until this was updated).
++
++    Still discovered by image+command rather than by container name, so an operator may call a stray container
++    anything and it is still found."""
+     declared = _manifest(RM_MANIFEST)["container"]
++    # Every command the manifest legitimately runs: each role's, or the single command for a role-less service.
++    roles = declared.get("roles")
++    fleet_commands = [role["command"] for role in roles] if roles else [declared["command"]]
+     found = {}
+     for name in _docker("ps", "--filter", f"network={NETWORK}", "--format", "{{.Names}}").split():
+         image = _docker("inspect", "-f", "{{.Config.Image}}", name, check=False).strip()
+         raw = _docker("inspect", "-f", "{{json .Config.Cmd}}", name, check=False).strip()
+         command = json.loads(raw) if raw and raw != "null" else None
+-        if image == declared["image"] and command != declared["command"]:
++        if image == declared["image"] and command not in fleet_commands:
+             found[name] = command
+     return found
+ 
+@@ -560,6 +609,88 @@ def _peer_stream(exchange):
+     return matching[-1]
+ 
+ 
++class _Recording(io.BytesIO):
++    """A recorded byte stream that survives being read as an HTTP response.
++
++    `HTTPResponse` closes its file object the moment the body is exhausted, and several responses can share one
++    recording (a retry that reused the connection), so `close` is a no-op here and the read position is what
++    carries the parse forward."""
++
++    def close(self):                                       # noqa: D102 - see the class docstring
++        pass
++
++
++class _ReplaySocket:
++    """Enough of a socket for `http.client.HTTPResponse`, which only ever calls `makefile("rb")` on it."""
++
++    def __init__(self, recording):
++        self._recording = recording
++
++    def makefile(self, *_args, **_kwargs):
++        return self._recording
++
++
++def _http_responses(raw):
++    """Every complete HTTP response in ``raw``, oldest first, as ``(status, headers, body)`` with the body
++    CONTENT-DECODED.
++
++    Parsed with the stdlib rather than by hand: framing (the status line, the header block, `Content-Length` vs
++    `Transfer-Encoding: chunked`) is `http.client`'s job, and re-implementing it in a test is how a test starts
++    asserting on its own parser instead of on the service."""
++    recording = _Recording(raw)
++    answers = []
++    while recording.tell() < len(raw):
++        if raw[recording.tell():].strip(b"\r\n") == b"":    # trailing CRLF after the last body
++            break
++        response = HTTPResponse(_ReplaySocket(recording))
++        response.begin()
++        headers = {key.lower(): value for key, value in response.getheaders()}
++        answers.append((response.status, headers, _content_decoded(headers, response.read())))
++    assert answers, f"no HTTP response could be parsed out of {len(raw)} recorded byte(s): {raw[:200]!r}"
++    return answers
++
++
++def _content_decoded(headers, body):
++    """``body`` with the `Content-Encoding` the response DECLARES undone — never guessed, and never skipped.
++
++    THIS IS THE REASON THIS HELPER EXISTS. RM's Legos client runs on `requests` (`coral.httphandler` uses a
++    `requests.Session`), which advertises `Accept-Encoding: gzip, deflate` and transparently decompresses
++    `.content` — and `LegosClient.__init__` even passes `signature_ignore_headers=["accept-encoding"]` so that
++    header stays out of the SigV4 signature. Legos' Coral server honours it. Measured on the successful
++    `CreateResources` in this suite: `Content-Type: application/json`, `Content-Encoding: gzip`,
++    `Content-Length: 352`. So the CLIENT sees JSON while the teed socket carries DEFLATE bytes, and a test that
++    greps the raw capture for a field name fails on a perfectly good answer (and could pass on the wrong one by
++    coincidence).
++
++    `amz-1.0` is passed through deliberately: it is CoralRPCv1's protocol marker (the client sets it on the
++    REQUEST), not a compression."""
++    encoding = headers.get("content-encoding", "identity").strip().lower()
++    if encoding in ("identity", "", "amz-1.0"):
++        return body
++    if encoding in ("gzip", "x-gzip"):
++        return gzip.decompress(body)
++    if encoding == "deflate":
++        # Both spellings are in the wild: zlib-wrapped (RFC 1950) and raw deflate (RFC 1951).
++        try:
++            return zlib.decompress(body)
++        except zlib.error:
++            return zlib.decompress(body, -zlib.MAX_WBITS)
++    raise AssertionError(
++        f"the peer answered with an undecoded Content-Encoding {encoding!r}; extend `_content_decoded` rather "
++        f"than asserting on the raw bytes, which are not text: {body[:80]!r}")
++
++
++def _peer_answer(exchange):
++    """The peer's LAST HTTP answer on the connection that carried the Legos RPC: ``(status, headers, text)``.
++
++    The last one for the same reason `_peer_stream` returns the last matching connection — a retry may put
++    several answers on one recording, and the one the client returned is the last."""
++    received = _peer_stream(exchange)["received"].encode("latin-1")
++    assert received, f"nothing came back from Legos (driver error: {exchange['error']})"
++    status, headers, body = _http_responses(received)[-1]
++    return status, headers, body.decode("utf-8", errors="replace")
++
++
+ def _drive(method, tags, kwargs, timeout_s=900):
+     """Run DRIVER inside RM's container for one client method, and return its parsed report.
+ 
+@@ -625,8 +756,11 @@ def created(exchange):
+     Depends on `exchange` and POLLS: the RPC's return value is deliberately not the source of truth here (a
+     stand-in could fabricate it), and the rows appear while the call is still in flight. Waits for the five rows
+     `CreateVPCResourceHandler` writes before it reaches subnets (vpc, internet-gateway, route-table and two
+-    security groups) so that a subnet failure — a separate, separately-diagnosed gap — does not present as "the
+-    whole brick is missing"."""
++    security groups) rather than for the subnets too, so that a subnet failure — which has twice been its own
++    separately-diagnosed gap (G1, G12, both now closed) — is diagnosed by the test that owns it instead of
++    presenting here as "the whole brick is missing". The subnet rows are therefore not guaranteed to be in
++    `rows`; anything that needs them re-reads the store (`test_legos_created_one_subnet_per_availability_zone…`
++    does, and the assertions here are written to hold whether or not they arrived in time)."""
+     core = {"vpc", "internet-gateway", "route-table", "security-group"}
+     rows = _poll(
+         f"Legos' ResourceStore rows for {_domain_ident()} (types {sorted(core)})",
+@@ -634,7 +768,7 @@ def created(exchange):
+         lambda seen: core <= {row["Type"] for row in seen}
+         and sum(1 for row in seen if row["Type"] == "security-group") >= 2)
+     vpc_row = next(row for row in rows if row["Type"] == "vpc")
+-    vpc_id = _arn_parts(vpc_row["ResourceArn"])["resource"]
++    vpc_id = _resource_id(vpc_row["ResourceArn"])
+     vpc = _aws("ec2", "describe-vpcs", "--vpc-ids", vpc_id)["Vpcs"][0]
+     return {"rows": rows, "vpc_row": vpc_row, "vpc_id": vpc_id, "vpc": vpc, "exchange": exchange}
+ 
+@@ -911,24 +1045,37 @@ def test_legos_answered_that_request_and_stayed_up(exchange):
+     Read off the PEER's connection, never the flat buffer: RM's config init already got a DynamoDB
+     `HTTP/1.1 200 OK` through the same front door, so a status line taken from the front of the flat buffer
+     would assert success on DynamoDB's answer and never look at Legos at all.
++
++    AND READ AS AN HTTP RESPONSE, NOT AS A STRING. The body on the wire is GZIP — `Content-Encoding: gzip`,
++    measured on the recorded headers — because RM's client is a `requests` session that advertises
++    `Accept-Encoding: gzip, deflate` and Legos' Coral server honours it (`CoralCompressionEngine-1.1.jar` is on
++    its classpath; the interception front door in the path forwards, and either way what the recording carries is
++    compressed bytes). An earlier revision of this test substring-matched the raw capture for `resourceList` and
++    failed the moment an answer actually carried one: the field name was there, in DEFLATE. Why it survived until
++    then is NOT measured here and should not be assumed — every earlier recorded answer was a modelled fault
++    taking the other branch below, and whether those were compressed too was never captured. So the response is
++    parsed and decoded by `_peer_answer`, and the
++    200 branch then reads `resourceList` as a JSON KEY rather than as a substring, which is strictly stronger —
++    a compressed body, a truncated body, or `resourceList` appearing inside some other field can no longer pass.
+     """
+     assert exchange["received"], f"nothing came back at all (driver error: {exchange['error']})"
+-    received = _peer_stream(exchange)["received"]
+-    assert received, f"nothing came back from Legos (driver error: {exchange['error']})"
+-    status = re.match(r"HTTP/1\.[01] (\d{3})", received)
+-    assert status, received[:400]
++    status, headers, body = _peer_answer(exchange)
+     assert _docker("inspect", "-f", "{{.State.Running}}", LEGOS).strip() == "true", \
+         "Legos died handling the request"
+ 
+-    if status.group(1) == "200":
+-        assert "resourceList" in received, (
++    if status == 200:
++        assert headers.get("content-type", "").startswith("application/json"), (
++            f"Legos answered 200 with Content-Type {headers.get('content-type')!r}; CoralRPCv1 answers JSON, and "
++            f"anything else means this is not the modelled reply: {body[:400]!r}")
++        answer = json.loads(body)
++        assert "resourceList" in answer, (
+             "Legos returned 200 with no modelled resourceList — extend this test rather than accepting an "
+-            f"ambiguous success: {received[-600:]}")
++            f"ambiguous success: {sorted(answer)} / {body[:600]}")
+     else:
+-        assert "LegosCreateVPCException" in received or "ValidationException" in received, (
+-            f"Legos answered {status.group(1)} with a body that is not one of its modelled faults, so the "
++        assert "LegosCreateVPCException" in body or "ValidationException" in body, (
++            f"Legos answered {status} with a body that is not one of its modelled faults, so the "
+             f"request never reached CreateResourcesActivity and nothing below is about Legos' behaviour: "
+-            f"{received[-800:]}")
++            f"{body[-800:]}")
+ 
+ 
+ # ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
+@@ -1109,12 +1256,12 @@ def test_legos_built_the_vpc_brick_the_handler_declares_and_not_the_emulators_de
+             f"without DNS resolution fails much later, in the data plane")
+ 
+     igw_row = next(row for row in created["rows"] if row["Type"] == "internet-gateway")
+-    igw_id = _arn_parts(igw_row["ResourceArn"])["resource"]
++    igw_id = _resource_id(igw_row["ResourceArn"])
+     igw = _aws("ec2", "describe-internet-gateways", "--internet-gateway-ids", igw_id)["InternetGateways"][0]
+     assert [a["VpcId"] for a in igw["Attachments"]] == [vpc_id], igw
+ 
+     rtb_row = next(row for row in created["rows"] if row["Type"] == "route-table")
+-    rtb_id = _arn_parts(rtb_row["ResourceArn"])["resource"]
++    rtb_id = _resource_id(rtb_row["ResourceArn"])
+     table = _aws("ec2", "describe-route-tables", "--route-table-ids", rtb_id)["RouteTables"][0]
+     assert table["VpcId"] == vpc_id, table
+     assert any(a.get("Main") for a in table.get("Associations", [])), (
+@@ -1218,9 +1365,36 @@ def test_legos_persisted_every_created_resource_in_its_own_store_keyed_by_the_id
+ 
+     The contract assertions are the ones that bind the two services together: RM sent `clientId`/`domainName`
+     and Legos reconstructed them into the HASH key `<clientId>:<domainName>`; RM sent `generation` and Legos
+-    stored it as `DomainIdentNumber`; every non-VPC row points at the VPC row through `ParentARN`. And every
+-    ARN's SERVICE field equals the row's `Type` — which is why RM's `legos_helper.get_resource_id(list, 'vpc')`
+-    finds anything at all.
++    stored it as `DomainIdentNumber`; every non-VPC row points at the VPC row through `ParentARN`.
++
++    THE ARN SHAPE IS ASSERTED PER KIND, BECAUSE LEGOS MINTS TWO — G13, a defect in Legos' own code that this
++    harness cannot fix. An earlier revision of this test required every row's ARN service field to equal its
++    `Type`, on the stated ground that RM's `get_resource_id(list, <type>)` selects on that field. BOTH halves
++    were wrong, and the ground truth is:
++
++      * `legos_helper.get_resource_id(resource_list, resource_type)` selects on the WIRE resource's `type`
++        attribute, not on anything inside the ARN, and then returns `arn.split(':')[-1]`.
++      * Legos stores (and returns) two ARN shapes: `ArnHelper.constructArn(cellId, <type>, <id>)` for the VPC,
++        internet gateway, route table and security groups — service field == type, cell id in the account
++        position, bare resource id — and, for subnets, the ARN EC2 itself returned, verbatim:
++        `arn:aws:ec2:<region>:<real account>:subnet/<id>`. See `_arn_parts`.
++      * The two ARN shapes then disagree on the WIRE about what a subnet's `type` even is, because
++        `CreateVPCResourceHandler` builds each response resource as
++        `Resource.builder().withType(arn.getService()).withArn(arn.toString())` — so a subnet comes back typed
++        **`ec2`**, while `GetResourceHandler` (the `GetResources` API) builds the same resource with
++        `withType(resourceStore.getType())`, i.e. **`subnet`**. Measured on the wire in this very run:
++        `{"arn":"arn:aws:ec2:us-east-1:000000000000:subnet/subnet-…","type":"ec2"}`.
++
++    WHAT THAT COSTS IN PRODUCTION, stated rather than implied: `get_resource_id(resource_list, 'subnet')` against
++    a `CreateResources` response returns `None` — no resource is typed `subnet` — and matching `'ec2'` instead
++    would yield `subnet/subnet-0123…`, which is not an id EC2 accepts. RM's create path survives only by not
++    using either: `vpc.legos_create` (`vpc.py:179-180`) calls `get_resource_id` for `'vpc'` and
++    `'internet-gateway'` only — both Legos-minted, both bare ids — and re-describes the subnets itself by
++    `{'vpc-id': …}` filter with `reject_on_empty_result=True`. So this is latent, not breaking, and the
++    assertions below pin the ACTUAL shapes so that a Legos fix shows up here as a failure to be read.
++
++    `DomainIdent`/`DomainIdentNumber`/`Status` are asserted for every row regardless of shape: those ARE uniform,
++    and they are the half of the contract RM sent.
+ 
+     `DomainMetadata` is checked too: with the AppConfig fixture's cell mapping disabled, Legos resolves the cell
+     from that table rather than from the CellMapping service, and the row it leaves behind is how the invented
+@@ -1230,9 +1404,30 @@ def test_legos_persisted_every_created_resource_in_its_own_store_keyed_by_the_id
+         "the ResourceStore seed now declares ROWS, so rows in that table are no longer evidence about Legos; "
+         "this whole test has to be re-scoped")
+ 
++    # The LIVE proof of SYS-seed AC-13 (a declared table is created when absent, with its key schema passed
++    # through unmodified). This replaces a tier1 test that asserted the exact `create_table` kwargs dict and the
++    # 3-call sequence — the request's SHAPE. Here the real emulator answers instead: the applier splits the
++    # file's grouped per-key facts back into KeySchema + AttributeDefinitions without renaming anything, and a
++    # wrong AttributeDefinition or a missing BillingMode makes CreateTable raise ValidationException, leaving no
++    # table for the query below to read. Deliberately NOT marked `@covers("SYS-seed", "AC-13")`: AC-13 is tagged
++    # [unit], and a Tier-2 binding skipped in the hermetic gate still RECORDS itself as not-passed, so the mark
++    # would turn into a `failing` violation the moment SYS-seed is promoted from draft to accepted. AC-13 keeps
++    # six passing tier1 bindings in tests/unit/test_seed.py.
++    declared = seed["items"][0]["key_schema"]
++    live = _aws("dynamodb", "describe-table", "--table-name", seed["items"][0]["table"])["Table"]
++    assert live["KeySchema"] == [{"AttributeName": k["AttributeName"], "KeyType": k["KeyType"]}
++                                 for k in declared], (
++        f"the live ResourceStore key schema is {live['KeySchema']} but "
++        f"{RESOURCE_STORE_SEED.name} declares {declared} — Legos' DAO queries the HASH key by name, so a "
++        f"renamed or reordered key makes every read miss rather than fail")
++    assert {(a["AttributeName"], a["AttributeType"]) for a in live["AttributeDefinitions"]} == {
++        (k["AttributeName"], k["AttributeType"]) for k in declared}, (
++        f"the seed declares attribute types {declared} but the created table carries "
++        f"{live['AttributeDefinitions']} — the applier renamed or dropped one on the way to CreateTable")
++
+     rows, ident = created["rows"], _domain_ident()
+     vpc_arn = created["vpc_row"]["ResourceArn"]
+-    cell, region = _cell_id(), _run_settings().region
++    cell, region, account = _cell_id(), _run_settings().region, _run_settings().account
+     counts = {}
+     for row in rows:
+         assert row["DomainIdent"] == ident, row
+@@ -1241,13 +1436,30 @@ def test_legos_persisted_every_created_resource_in_its_own_store_keyed_by_the_id
+             f"`CreateResourcesRequest.domainIdentNumber`: {row}")
+         assert row["Status"] == "CREATED", row
+         parts = _arn_parts(row["ResourceArn"])
+-        assert parts["service"] == row["Type"], (
+-            f"the ARN's service field must BE the resource type — RM's `get_resource_id(list, <type>)` selects "
+-            f"on it: {row}")
+         assert parts["region"] == region, row
+-        assert parts["account"] == cell, (
+-            f"the ARN's account position carries {parts['account']!r}; Legos mints it from the resolved cell id, "
+-            f"which in this run is the AppConfig fixture's {cell!r}: {row}")
++        if row["Type"] in AWS_MINTED_ARN_TYPES:
++            # AWS' own ARN, stored verbatim (G13). Its three differences from Legos' shape are each asserted, so
++            # that Legos moving this kind onto `ArnHelper.constructArn` fails HERE and is read as the fix it is.
++            assert parts["service"] == "ec2", (
++                f"a {row['Type']} row is stored as the ARN EC2 returned, whose service field is the AWS service: "
++                f"{row}")
++            assert parts["account"] == account, (
++                f"an AWS-minted ARN carries the account EC2 answered with ({account!r}), not the cell id: {row}")
++            assert parts["resource"] == f"{row['Type']}/{_resource_id(row['ResourceArn'])}", (
++                f"an AWS-minted ARN's resource field is `<type>/<id>`; RM's `get_resource_id` would return the "
++                f"whole of it: {row}")
++        else:
++            assert parts["service"] == row["Type"], (
++                f"a Legos-MINTED ARN comes from `ArnHelper.constructArn(cellId, <type>, <id>)`, so its service "
++                f"field is the resource type — and that is what makes the wire `type` this row is returned under "
++                f"equal its stored `Type` (`CreateVPCResourceHandler` derives the wire type from the ARN's "
++                f"service). Only `{sorted(AWS_MINTED_ARN_TYPES)}` are exempt: {row}")
++            assert parts["account"] == cell, (
++                f"the ARN's account position carries {parts['account']!r}; Legos mints it from the resolved cell "
++                f"id, which in this run is the AppConfig fixture's {cell!r}: {row}")
++            assert "/" not in parts["resource"], (
++                f"a Legos-minted ARN's resource field is a BARE id — RM's `get_resource_id` returns it with "
++                f"`arn.split(':')[-1]` and hands it straight to EC2: {row}")
+         if row["Type"] != "vpc":
+             assert row.get("ParentARN") == vpc_arn, row
+         counts[row["Type"]] = counts.get(row["Type"], 0) + 1
+@@ -1257,7 +1469,9 @@ def test_legos_persisted_every_created_resource_in_its_own_store_keyed_by_the_id
+         f"(a third would mean the v2n group was built, which needs egress enabled)")
+ 
+     # Every recorded id exists in the emulator. Followed per resource type, because that is the check a canned
+-    # reply cannot survive.
++    # reply cannot survive. Through `_resource_id`, not the raw ARN resource field: for a subnet that field is
++    # `subnet/<id>` (G13) and `describe-subnets --subnet-ids subnet/subnet-…` answers InvalidSubnetID.Malformed —
++    # which would report Legos' shape defect as "the emulator does not have it".
+     describe = {"vpc": ("ec2", "describe-vpcs", "--vpc-ids"),
+                 "internet-gateway": ("ec2", "describe-internet-gateways", "--internet-gateway-ids"),
+                 "route-table": ("ec2", "describe-route-tables", "--route-table-ids"),
+@@ -1265,7 +1479,7 @@ def test_legos_persisted_every_created_resource_in_its_own_store_keyed_by_the_id
+                 "subnet": ("ec2", "describe-subnets", "--subnet-ids")}
+     for row in rows:
+         command = describe[row["Type"]]
+-        resource = _arn_parts(row["ResourceArn"])["resource"]
++        resource = _resource_id(row["ResourceArn"])
+         code, _, stderr = _aws_raw(*command, resource)
+         assert code == 0, (
+             f"Legos recorded {row['Type']} {resource} but the emulator does not have it — a recorded ARN that "
+@@ -1279,13 +1493,6 @@ def test_legos_persisted_every_created_resource_in_its_own_store_keyed_by_the_id
+     assert metadata["Item"]["CellId"]["S"] == cell, metadata
+ 
+ 
+-@pytest.mark.xfail(strict=True, reason=(
+-    "L2 step 8 blocked by G12, measured live: the emulator's DescribeAvailabilityZones returns NO "
+-    "NetworkBorderGroup, and SubnetOperations.filterAZinNetworkBorder (SubnetOperations.java:465) calls "
+-    "`.equals` on `AvailabilityZone.getNetworkBorderGroup()` unguarded -> NullPointerException inside "
+-    "fetchSubnetMapping, so createSubnetsIfRequired never reaches CreateSubnet. Closing it needs the emulator "
+-    "to report a network border group (an emulator boot hook, as with the EC2 rules-per-SG ceiling), not "
+-    "another fixture value."))
+ def test_legos_created_one_subnet_per_availability_zone_inside_the_domain_vpc(created):
+     """L2 step 8 — the last step of the brick, and the one the whole data plane waits on.
+ 
+@@ -1296,19 +1503,23 @@ def test_legos_created_one_subnet_per_availability_zone_inside_the_domain_vpc(cr
+     order by zone name matching the order by address — which hold whatever the mapping says and break if the
+     plan is computed from the wrong AZ set.
+ 
+-    Two DIFFERENT gaps have stopped this step, and the failure message reports both counts because "zero
+-    subnets" on its own points nowhere:
++    NO LONGER AN XFAIL — both gaps that used to stop this step are closed, which is why the failure message
++    still reports each one's own count: "zero subnets" points nowhere on its own, and these two present
++    identically because subnets are created LAST (a domain with every other resource and none of these).
+ 
+       * **G1 (closed).** A single-bodied Config-Service stand-in answered `DescribeAZs` with a
+         `GetVPCOptionsResponse` and Coral raised `SerializationException`. Per-operation `x-amz-target` matching
+         fixed it; `SubnetOperations:fetchDataAZsForDomain:Success=1` is now measured.
+-      * **G12 (open, and why this is an xfail).** With the AZ list finally arriving,
+-        `filterAZinNetworkBorder` NPEs on `getNetworkBorderGroup()`, which this emulator does not populate.
+-        Subnets are created LAST, so both gaps present identically — a domain with every other resource and no
+-        subnets — which is exactly why the diagnosis has to distinguish them.
++      * **G12 (closed).** With the AZ list arriving, `filterAZinNetworkBorder` then NPE'd on
++        `getNetworkBorderGroup()`, which the emulator did not populate. It now does — measured
++        `NetworkBorderGroup: us-east-1` on every AZ — and Legos' own metrics for the run this was un-xfailed on
++        read `fetchSubnetMapping:Success=1`, `createSubnetsIfRequired:Success=1`,
++        `createSubnetsIfRequired:Failure=0`, `CreateResourcesActivity:Success=1`, with six subnets in the domain
++        VPC, one per AZ, `10.212.16.0/20` … `10.212.96.0/20`.
+ 
+-    Strict, so the day a boot hook makes the emulator report a border group this test XPASSes, FAILS the suite,
+-    and forces docs/validation/rm-legos-responsibility-matrix.md to be updated in the same change.
++    The strict `xfail` this test carried was removed rather than left to XPASS: it existed to fail the day a
++    border group appeared, it did its job, and `docs/validation/rm-legos-responsibility-matrix.md`'s L2-step-8
++    and G12 rows move with it.
+ 
+     It also carries the one assertion RM cares about most: `vpc.legos_create` re-describes the subnets itself
+     with `reject_on_empty_result=True`, so an empty list fails RM's activity AFTER the RPC returned. A green
+@@ -1328,8 +1539,9 @@ def test_legos_created_one_subnet_per_availability_zone_inside_the_domain_vpc(cr
+         f"Config Service answering DescribeAZs with the wrong body — the front door needs a mapping keyed on "
+         f"that operation's x-amz-target, see backends/proxy/_internal-hosts/legos.yaml) and "
+         f"{_legos_service_log('fetchSubnetMapping:Failure.NullPointerException')} fetchSubnetMapping NPE(s) "
+-        f"(G12: the emulator reports no NetworkBorderGroup and filterAZinNetworkBorder dereferences it), out "
+-        f"of {_legos_service_log('createSubnetsIfRequired:Failure')} createSubnetsIfRequired failure(s)")
++        f"(G12 regressed: the emulator stopped reporting a NetworkBorderGroup and filterAZinNetworkBorder "
++        f"dereferences it — check `awslocal ec2 describe-availability-zones`), out of "
++        f"{_legos_service_log('createSubnetsIfRequired:Failure')} createSubnetsIfRequired failure(s)")
+ 
+     assert {s["AvailabilityZone"] for s in subnets} == set(zones), (
+         f"the subnets are not one per AZ: {[(s['SubnetId'], s['AvailabilityZone']) for s in subnets]}")
+@@ -1353,7 +1565,7 @@ def test_legos_created_one_subnet_per_availability_zone_inside_the_domain_vpc(cr
+ 
+     # Legos records what it created: `saveCreatedSubnetArn` writes one row per subnet, so the store and EC2 must
+     # agree. A subnet in EC2 with no row (or the reverse) is a half-completed brick RM would later mis-handle.
+-    recorded = {_arn_parts(row["ResourceArn"])["resource"]
++    recorded = {_resource_id(row["ResourceArn"])
+                 for row in _store_rows() if row["Type"] == "subnet"}
+     assert recorded == {s["SubnetId"] for s in subnets}, (
+         f"Legos' ResourceStore subnet rows {sorted(recorded)} do not match the subnets in the VPC "
+@@ -1373,11 +1585,17 @@ def test_the_mocks_that_bound_every_claim_here_are_still_the_mocks_in_the_run(fl
+       * **ARS is mocked off.** `LEGOS_MOCK_ARS` disables authentication and authorization entirely and
+         fabricates a service principal. Nothing in this file may claim anything about auth, and the value is
+         read from the manifest rather than restated so the two cannot drift.
+-      * **Legos' `main()` aborted.** The same classpath shadow removes the sole `@Named("TUMBLER_SP")` provider,
+-        so Guice cannot construct `AsyncTaskManager` and `SearchServicesLegosService.main` throws AFTER Bobcat
+-        has started listening — which is why the readiness probe is green and every fact measured here comes
+-        from a half-initialized JVM that production cannot produce. There is no state query for "the main thread
+-        died": the container's stderr is the only evidence, so it is used here and nowhere else.
++      * **Legos' `main()` aborted** — still, but on a DIFFERENT cause than when this guard was written, which is
++        exactly why it is pinned to the current one rather than to "some failure". It used to abort because the
++        ARS mock removed the sole `@Named("TUMBLER_SP")` provider and `AsyncTaskManager` was therefore not
++        constructible; the mock now provides TUMBLER_SP, and `main()` gets four lines further and dies at
++        `SearchServicesLegosService.java:89` on G9 — `DeleteVpcEndpointBaseActivity`'s unqualified
++        `Map<String, String>` (see `test_legos_guice_injector_actually_finished_because_ping_does_not_prove_it`
++        for the whole mechanism). The CONSEQUENCE is unchanged and is what this bullet is for: line 89 is still
++        the end of `main`, so `gizmoEngine.start()`, the shutdown hook, `DynamicConfigHelper` and the CloudWatch
++        publisher never run, and every fact in this file still comes from a half-initialized JVM that production
++        cannot produce. There is no state query for "the main thread died": the container's stderr is the only
++        evidence, so it is used here and nowhere else.
+       * **One fixture cell, every feature flag false.** So the flag-on branch of every gate is dark, and the
+         cell id is invented.
+       * **One documentation CIDR of Dogfish data.** So no ingress rule here permits anything real.
+@@ -1390,13 +1608,25 @@ def test_the_mocks_that_bound_every_claim_here_are_still_the_mocks_in_the_run(fl
+     assert "LEGOS_MOCK_ARS=1" in running, (
+         f"the ARS mock is declared but not in the running container's environment: {running}")
+ 
++    # The half-initialized JVM, pinned to the CAUSE currently recorded. This guard was aimed at TUMBLER_SP and
++    # fired correctly when the ARS mock started providing it: the cause moved, `main()` did not survive. It is
++    # re-aimed rather than relaxed — if THIS cause disappears too, `main()` really may run to the end, and
++    # everything this file declares about Gizmo, dynamic config, graceful shutdown and metrics changes with it.
+     boot = _container_output(LEGOS)
+-    assert 'No implementation for String annotated with @Named("TUMBLER_SP")' in boot, (
+-        "Legos' injector no longer fails on TUMBLER_SP, so `main()` may now complete — Gizmo starts, the "
+-        "shutdown hook is installed, and `AsyncTaskManager` is constructible. That closes the gap behind this "
+-        "file's L5 xfails and invalidates every measurement taken from the half-initialized JVM: re-measure, "
+-        f"un-xfail the async tests, and update docs/validation/rm-legos-responsibility-matrix.md. Log tail:\n"
+-        f"{boot[-1200:]}")
++    for fingerprint in ('Exception in thread "main"',
++                        "No implementation for Map<String, String> was bound",
++                        "DeleteVpcEndpointBaseActivity.<init>",
++                        "SearchServicesLegosService.main(SearchServicesLegosService.java:89)"):
++        assert fingerprint in boot, (
++            f"Legos' `main()` no longer dies with {fingerprint!r}. If it now COMPLETES, `gizmoEngine.start()`, "
++            "the shutdown hook, `DynamicConfigHelper` and the CloudWatch publisher all run for the first time — "
++            "re-measure every claim taken from the half-initialized JVM, re-read the L4/L5 xfails, and update "
++            "docs/validation/rm-legos-responsibility-matrix.md (G9). If it dies SOMEWHERE ELSE instead, diagnose "
++            "that before trusting anything in this file: an injector that failed earlier than line 89 may not "
++            f"have built the request chain at all. Log tail:\n{boot[-1500:]}")
++    assert 'No implementation for String annotated with @Named("TUMBLER_SP")' not in boot, (
++        "the TUMBLER_SP binding is missing again, so this run is the OLD half-initialized JVM and not the one "
++        f"this file's claims were measured on — re-measure rather than reading across: {boot[-1200:]}")
+ 
+     appconfig = _manifest(APPCONFIG)
+     cells = [c for m in appconfig["mappings"]
+@@ -1419,14 +1649,28 @@ def test_no_domain_manager_workflow_execution_exists_which_is_what_bounds_every_
+     """The measured proof of the gap that keeps RM's decider and its 3,200-line FSM at zero coverage.
+ 
+     RM's decider is running and its workflow types are registered, but nothing STARTS an execution: the internal
+-    Config Service is the only production caller of `StartWorkflowExecution` for `cs-domain-manager-wf`, it is
+-    not onboarded, and RM's own operator tools that could substitute (`cs-create-domain-instance`,
+-    `cs-recover-domain`) dial `cloudsearch:internal-service-endpoint`, which this harness deliberately points at
+-    the reserved `.invalid` TLD so that reaching for it fails loud.
+-
+-    Asserting the emptiness rather than describing it is the point. Every `xfail` below this line is justified by
+-    THIS test passing; when it fails, an execution exists, and those xfails become XPASS failures that force the
+-    matrix doc to be updated in the same change."""
++    Config Service is the only production caller of `StartWorkflowExecution` for `cs-domain-manager-wf`, and RM's
++    own operator tools that could substitute (`cs-create-domain-instance`, `cs-recover-domain`) reach it through
++    `cloudsearch:internal-service-endpoint`.
++
++    THE PREMISE WAS RESTATED, because the mechanism behind it changed under it. That endpoint used to be the
++    reserved `.invalid` TLD — reaching for it could only fail — and this test asserted exactly that. It is now
++    `https://callback.es-dev.us-east-1.amazonaws.com`: a name the interception front door is authoritative for
++    and ANSWERS, from `backends/proxy/_internal-hosts/resource-manager.yaml`. Reaching the Config Service is
++    therefore no longer impossible, so "nothing can dial it" is no longer what bounds R4-R9. Two things are:
++
++      * **the stand-in REFUSES the one operation that would start a workflow.** It is stateless and holds no
++        SWF client; `CreateDomainInstance` — which in production issues `StartWorkflowExecution` for
++        `cs-domain-manager-wf` — is answered `501 AOSCPLocalStackOperationNotStoodIn` rather than acknowledged,
++        precisely so a canned 200 cannot make `cs-create-domain-instance` report success while nothing ran. That
++        refusal is READ OUT OF THE FIXTURE below, not restated, so turning it into a 200 fails this test.
++      * **and, measured rather than argued, nobody ever issued the call.** RM's own AWS request log records every
++        operation it sent; `swf:start_workflow_execution` appears in neither container's. This is the assertion
++        that would fail if some path nothing here anticipated started an execution.
++
++    Asserting all of that rather than describing it is the point. Every `xfail` below this line is justified by
++    THIS test passing; when it fails, an execution exists (or can be started), and those xfails become XPASS
++    failures that force the matrix doc to be updated in the same change."""
+     stack = _stack()
+     for listing in ("list-open-workflow-executions", "list-closed-workflow-executions"):
+         executions = _aws("swf", listing, "--domain", stack,
+@@ -1436,11 +1680,32 @@ def test_no_domain_manager_workflow_execution_exists_which_is_what_bounds_every_
+             f"docs/validation/rm-legos-responsibility-matrix.md are no longer blocked — un-xfail the decider "
+             f"tests below and move those rows to validated")
+ 
+-    per_stack = (REPO / "services" / "resource-manager" / "config" / "stacks" / f"{stack}.stanza"
+-                 ).read_text(encoding="utf-8")
+-    assert re.search(r"^\s*internal-service-endpoint\s*=\s*\S*\.invalid", per_stack, re.MULTILINE), (
+-        "RM's Config Service endpoint is no longer `.invalid`, so something may now start a workflow; this "
+-        "test's premise has changed")
++    # Nobody issued the call. Read from RM's OWN request log — the same log R3 reads, in the same `<service>:
++    # <snake_case operation>` form — and from BOTH of RM's containers, because either could in principle start
++    # one. The positive control is deliberate: a log that does not even contain `swf:register_domain` is a log
++    # this grep cannot speak about, and "no matches" would then mean nothing at all.
++    for container in (RM, RM_ACTIVITY, *_rm_sibling_processes()):
++        log = _docker("exec", container, "sh", "-c",
++                      "cat /rm-config/var/output/logs/aws-requests.general.log.* 2>/dev/null || true",
++                      check=False)
++        assert re.search(r"swf:(register_domain|register_activity_type|poll_for_)", log), (
++            f"{container}'s AWS request log carries no SWF operation at all, so the absence of "
++            f"`swf:start_workflow_execution` below is not evidence of anything. Log size: {len(log)} byte(s)")
++        assert "swf:start_workflow_execution" not in log, (
++            f"{container} issued StartWorkflowExecution, so RM's decider is no longer dark even if the execution "
++            f"has already been reaped — read its history and un-xfail R4-R9")
++
++    # The refusal that keeps it that way, read from the stand-in's own declaration.
++    standin = _manifest(REPO / "backends" / "proxy" / "_internal-hosts" / "resource-manager.yaml")
++    refusals = [mapping.get("status") for host in standin["internal_hosts"]
++                for mapping in host.get("mappings", [])
++                if (mapping.get("match_form_params") or {}).get("Action") == "CreateDomainInstance"]
++    assert refusals and all(status != 200 for status in refusals), (
++        f"the Config Service stand-in now answers `CreateDomainInstance` with {refusals} — in production that "
++        f"operation issues StartWorkflowExecution for cs-domain-manager-wf, and a 200 here makes "
++        f"`cs-create-domain-instance` report success while nothing starts. Either it now really does start the "
++        f"execution (in which case this premise is dead: re-measure and un-xfail R4-R9) or the refusal was "
++        f"weakened by accident (in which case restore it — see that file's own warning)")
+ 
+ 
+ # ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
+@@ -1449,9 +1714,11 @@ def test_no_domain_manager_workflow_execution_exists_which_is_what_bounds_every_
+ # ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ 
+ @pytest.mark.xfail(strict=True, reason=(
+-    "R4 blocked: nothing starts a cs-domain-manager-wf execution. The internal Config Service is the only "
+-    "production caller of StartWorkflowExecution for it and is not onboarded; RM's ops tools dial "
+-    "configservice.invalid. Proven by test_no_domain_manager_workflow_execution_exists_..."))
++    "R4 blocked by G2: nothing starts a cs-domain-manager-wf execution. The internal Config Service is the only "
++    "production caller of StartWorkflowExecution for it and is STOOD IN rather than onboarded -- the stand-in is "
++    "stateless, holds no SWF client, and refuses CreateDomainInstance with 501. Proven by "
++    "test_no_domain_manager_workflow_execution_exists_..., which also measures that neither RM container ever "
++    "issued StartWorkflowExecution."))
+ def test_the_decider_schedules_the_domain_activities_in_the_order_its_fsm_declares(fleet):
+     """R4 — the first assertable milestone of the decider, and the only one that needs no other fix.
+ 
+@@ -1554,8 +1821,10 @@ def test_create_domain_instance_records_that_it_routed_the_vpc_work_to_legos(fle
+ 
+ 
+ @pytest.mark.xfail(strict=True, reason=(
+-    "L4 blocked by L2 step 8 and L5: CreateNodeGroup needs subnet ids for VPCZoneIdentifier and target-group "
+-    "ARNs from the async frontend, and it is only called from RM's create-domain-instance activity (R4's gap)."))
++    "L4 blocked by G2 and L5, NARROWED: L2 step 8 no longer blocks it -- the domain VPC now has one subnet per "
++    "AZ (G12 closed), so VPCZoneIdentifier has ids to use. What remains is that CreateNodeGroup is called only "
++    "from RM's create-domain-instance activity (G2, no SWF execution) and needs target-group ARNs from the async "
++    "frontend (L5)."))
+ def test_legos_creates_the_launch_template_and_auto_scaling_group_for_the_node_group(created):
+     """L4 — where EC2 instances actually come from. `CreateNodeGroupHandler` builds a launch template if absent
+     (AMI, instance type, IMDSv2, block devices, one NIC with the security groups, user data) and then an ASG
+@@ -1581,9 +1850,13 @@ def test_legos_creates_the_launch_template_and_auto_scaling_group_for_the_node_g
+ 
+ 
+ @pytest.mark.xfail(strict=True, reason=(
+-    "L5 removed by the ARS mock: it shadows the sole @Named(\"TUMBLER_SP\") provider, AsyncTaskManager cannot "
+-    "be constructed, and SubmitTask/GetTaskStatus/KillTask all inject it. Proven by "
+-    "test_the_mocks_that_bound_every_claim_here_are_still_the_mocks_in_the_run."))
++    "L5 blocked by G2, RE-AIMED: the old reason -- the ARS mock shadowing the sole @Named(\"TUMBLER_SP\") "
++    "provider, so AsyncTaskManager was not constructible -- is no longer true; the mock now provides TUMBLER_SP "
++    "and main() dies four lines later on G9 instead (pinned by "
++    "test_the_mocks_that_bound_every_claim_here_are_still_the_mocks_in_the_run). What blocks L5 now is that "
++    "NOTHING SUBMITS A TASK: `legos_helper.create_frontend_resource` is called only from RM's "
++    "create-domain-instance activity, which needs the SWF execution G2 withholds. Measured: TaskMetadata is "
++    "empty and no ALB or target group exists. `Owner` stays unassertable regardless while auth is mocked off."))
+ def test_legos_runs_the_async_frontend_task_and_records_it_in_task_metadata(fleet):
+     """L5 — the async frontend: RM's `legos_helper.create_frontend_resource` submits an `upsertFrontend` task,
+     polls `GetTaskStatus` every 10 s to COMPLETED, and filters the returned resources for the load balancer and
+@@ -1674,10 +1947,10 @@ def test_rm_can_tear_the_brick_down_through_legos_and_the_store_returns_to_empty
+     the elb rule pointing at the domain group), which is a real finding about the teardown order, not about
+     this test."""
+     vpc_id = created["vpc_id"]
+-    group_ids = [_arn_parts(row["ResourceArn"])["resource"]
++    group_ids = [_resource_id(row["ResourceArn"])
+                  for row in created["rows"] if row["Type"] == "security-group"]
+-    igw_id = _arn_parts(next(row for row in created["rows"]
+-                             if row["Type"] == "internet-gateway")["ResourceArn"])["resource"]
++    igw_id = _resource_id(next(row for row in created["rows"]
++                              if row["Type"] == "internet-gateway")["ResourceArn"])
+ 
+     report = _drive("delete_vpc_resource", ["aoscp-joint-delete"], {})
+     # The RPC's own outcome is DIAGNOSTICS, not the assertion — same rule as everywhere else in this file. A

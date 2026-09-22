@@ -1,0 +1,36 @@
+Usage: docker run ... <image> <command> [args]
+
+Commands:
+  decider                 run bin/domain-manager-workflow-poller (registers the SWF domain and
+                          workflow types, then polls for decision tasks)
+  activity-poller [N]     run bin/domain-manager-activity-poller --max-activity-workers N (default 4)
+  config-standin <script> [port]
+                          run the internal Config Service stand-in; mount standin-config-service.py
+                          and standin_config_actions.py in and pass the script's container path
+  exec <cmd> [args]       run an arbitrary command with the RM environment applied
+  shell                   interactive bash with the RM environment applied
+
+Environment:
+  RM_EMULATOR_HOST       AWS emulator host reachable from this container. Not defaulted here on
+                         purpose -- whether that is host.docker.internal, a --network host
+                         loopback, or a compose service name depends on how you're running this,
+                         and getting it wrong silently talks to the wrong thing. Set it to
+                         override the endpoints already baked into the closure's stanza, or bake
+                         a stanza with the right host in via a derived image.
+  RM_CA_BUNDLE           path to the emulator's CA bundle (PEM; a bundle with the run CA appended
+                         is expected, not a single certificate). Defaults to AWS_CA_BUNDLE, then
+                         REQUESTS_CA_BUNDLE, so a harness that already exports either needs no
+                         extra flag. Its certificates are MERGED at start-up into the trust stores
+                         this image's interpreter actually consults -- which is NOT the same as
+                         setting REQUESTS_CA_BUNDLE, see the trust block below. Not baked into the
+                         image: the CA is regenerated on every emulator start, so a baked copy is
+                         stale on the next run.
+  RM_HEALTH_PORT         port for the `decider`/`activity-poller` liveness probe (default 8080) --
+                         orchestrators that require a real HTTP GET readiness check (not a bare TCP
+                         connect) poll this. Startup fails immediately if nothing is listening on it
+                         a couple of seconds in, rather than deferring to a readiness timeout.
+  RM_HEALTH_REQUIRED     1 (default) makes a failed liveness bind fatal; 0 downgrades it to a
+                         warning, which is what a --network host run wants (the port is the host's,
+                         so a collision with something already listening is routine).
+  RM_SANDBOX_COMMON      where SearchServicesSandboxImageCommon was staged in this image
+                         (default /opt/amazon/sandbox-common).
