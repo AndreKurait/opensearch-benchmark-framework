@@ -1,6 +1,6 @@
 # OpenSearch 3.5 — 8th-Gen EC2 CPU Architecture Benchmark
 
-**Generated:** 2026-09-22 19:49 UTC  
+**Generated:** 2026-09-22 19:53 UTC  
 **Instance size:** `8xlarge` | **Load generator:** `c8i.8xlarge` (fixed everywhere)  
 **Repetitions:** 7, one per region | **Tool:** OpenSearch Benchmark | **OpenSearch:** 3.5.0 | **EKS Auto Mode + Karpenter**
 
@@ -146,11 +146,11 @@ Each region is an independent repetition on independent hardware. Below, each re
 
 | family | load level | regions favouring Turin | favouring Graviton4 | verdict |
 |---|---|--:|--:|---|
-| m | `load-2000` | 1 | 0 | **unanimous: Turin** (1/1) |
+| m | `load-2000` | 2 | 0 | **unanimous: Turin** (2/2) |
 | m | `load-500` | 4 | 0 | **unanimous: Turin** (4/4) |
-| c | `load-2000` | 1 | 0 | **unanimous: Turin** (1/1) |
+| c | `load-2000` | 2 | 0 | **unanimous: Turin** (2/2) |
 | c | `load-500` | 3 | 0 | **unanimous: Turin** (3/3) |
-| r | `load-2000` | 1 | 0 | **unanimous: Turin** (1/1) |
+| r | `load-2000` | 2 | 0 | **unanimous: Turin** (2/2) |
 | r | `load-500` | 5 | 0 | **unanimous: Turin** (5/5) |
 
 A split vote overrides any percentage in the table above: if regions disagree on the direction, the effect is within regional noise regardless of what the pooled IQRs show.
@@ -159,19 +159,28 @@ A split vote overrides any percentage in the table above: if regions disagree on
 
 All collected runs passed validity checks (error rate ≤ 0.1%, doc counts verified, no ignored workload params, OSB exit 0).
 
-51 run(s) included but with a weakened audit trail:
+60 run(s) included but with a weakened audit trail:
 
 | workload | load | rep | perm | caveat |
 |---|---|---|---|---|
 | geonames | load-2000 | eu-south-2 | m8g | doc count unverified (probe could not reach cluster) |
+| geonames | load-2000 | eu-west-1 | m8g | doc count unverified (probe could not reach cluster) |
 | geonames | load-2000 | eu-south-2 | m8a | doc count unverified (probe could not reach cluster) |
+| geonames | load-2000 | eu-west-1 | m8a | doc count unverified (probe could not reach cluster) |
 | geonames | load-2000 | eu-south-2 | m8i | doc count unverified (probe could not reach cluster) |
+| geonames | load-2000 | eu-west-1 | m8i | doc count unverified (probe could not reach cluster) |
 | geonames | load-2000 | eu-south-2 | c8g | doc count unverified (probe could not reach cluster) |
+| geonames | load-2000 | eu-west-1 | c8g | doc count unverified (probe could not reach cluster) |
 | geonames | load-2000 | eu-south-2 | c8a | doc count unverified (probe could not reach cluster) |
+| geonames | load-2000 | eu-west-1 | c8a | doc count unverified (probe could not reach cluster) |
 | geonames | load-2000 | eu-south-2 | c8i | doc count unverified (probe could not reach cluster) |
+| geonames | load-2000 | eu-west-1 | c8i | doc count unverified (probe could not reach cluster) |
 | geonames | load-2000 | eu-south-2 | r8g | doc count unverified (probe could not reach cluster) |
+| geonames | load-2000 | eu-west-1 | r8g | doc count unverified (probe could not reach cluster) |
 | geonames | load-2000 | eu-south-2 | r8a | doc count unverified (probe could not reach cluster) |
+| geonames | load-2000 | eu-west-1 | r8a | doc count unverified (probe could not reach cluster) |
 | geonames | load-2000 | eu-south-2 | r8i | doc count unverified (probe could not reach cluster) |
+| geonames | load-2000 | eu-west-1 | r8i | doc count unverified (probe could not reach cluster) |
 | geonames | load-500 | ap-northeast-1 | m8g | doc count unverified (probe could not reach cluster) |
 | geonames | load-500 | eu-central-1 | m8g | doc count unverified (probe could not reach cluster) |
 | geonames | load-500 | eu-south-2 | m8g | doc count unverified (probe could not reach cluster) |
@@ -217,4 +226,4 @@ All collected runs passed validity checks (error rate ≤ 0.1%, doc counts verif
 
 `doc count unverified (probe could not reach cluster)` means the in-pod probe failed, not that the data is wrong: the opensearch-benchmark image ships no `curl`, so every probe request returned empty. Doc counts for these runs were instead verified out-of-band directly against each cluster, and came back identical (11,396,503 documents, 3/3 shards successful) on Graviton, AMD and Intel alike. The probe is fixed for subsequent runs.
 
-*Generated 2026-09-22 19:49 UTC — [opensearch-benchmark-framework](https://github.com/AndreKurait/opensearch-benchmark-framework)*
+*Generated 2026-09-22 19:53 UTC — [opensearch-benchmark-framework](https://github.com/AndreKurait/opensearch-benchmark-framework)*

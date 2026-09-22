@@ -1,0 +1,445 @@
+Metric,Task,Value,Unit
+Cumulative indexing time of primary shards,,7.618883333333333,min
+Min cumulative indexing time across primary shards,,2.349283333333333,min
+Median cumulative indexing time across primary shards,,2.6181833333333335,min
+Max cumulative indexing time across primary shards,,2.651416666666667,min
+Cumulative indexing throttle time of primary shards,,0,min
+Min cumulative indexing throttle time across primary shards,,0,min
+Median cumulative indexing throttle time across primary shards,,0,min
+Max cumulative indexing throttle time across primary shards,,0,min
+Cumulative merge time of primary shards,,3.9831166666666666,min
+Cumulative merge count of primary shards,,83,
+Min cumulative merge time across primary shards,,1.1608666666666667,min
+Median cumulative merge time across primary shards,,1.1866333333333332,min
+Max cumulative merge time across primary shards,,1.6356166666666667,min
+Cumulative merge throttle time of primary shards,,1.7979999999999998,min
+Min cumulative merge throttle time across primary shards,,0.2861666666666667,min
+Median cumulative merge throttle time across primary shards,,0.6089333333333333,min
+Max cumulative merge throttle time across primary shards,,0.9029,min
+Cumulative refresh time of primary shards,,0.46044999999999997,min
+Cumulative refresh count of primary shards,,58,
+Min cumulative refresh time across primary shards,,0.06691666666666667,min
+Median cumulative refresh time across primary shards,,0.15313333333333334,min
+Max cumulative refresh time across primary shards,,0.2404,min
+Cumulative flush time of primary shards,,0.2955833333333333,min
+Cumulative flush count of primary shards,,9,
+Min cumulative flush time across primary shards,,0.06701666666666667,min
+Median cumulative flush time across primary shards,,0.08521666666666668,min
+Max cumulative flush time across primary shards,,0.14335,min
+Total Young Gen GC time,,139.382,s
+Total Young Gen GC count,,5395,
+Total Old Gen GC time,,0,s
+Total Old Gen GC count,,0,
+Doc count,,11396503,
+Store size,,5.768848352134228,GB
+Translog size,,3.073364496231079e-07,GB
+Heap used for segments,,0,MB
+Heap used for doc values,,0,MB
+Heap used for terms,,0,MB
+Heap used for norms,,0,MB
+Heap used for points,,0,MB
+Heap used for stored fields,,0,MB
+Segment count,,32,
+error rate,index-append,0.00,%
+Min Throughput,index-stats,1998.29,ops/s
+Mean Throughput,index-stats,1999.23,ops/s
+Median Throughput,index-stats,1999.26,ops/s
+Max Throughput,index-stats,1999.84,ops/s
+50th percentile latency,index-stats,1.5610300006301259,ms
+90th percentile latency,index-stats,2.0228870012942934,ms
+99th percentile latency,index-stats,2.3598028097694623,ms
+99.9th percentile latency,index-stats,11.270488585694817,ms
+99.99th percentile latency,index-stats,62.73662704695248,ms
+100th percentile latency,index-stats,67.05002499984403,ms
+50th percentile service time,index-stats,0.7714970006418298,ms
+90th percentile service time,index-stats,1.0179779997997684,ms
+99th percentile service time,index-stats,1.2377648296023838,ms
+99.9th percentile service time,index-stats,1.861674335560233,ms
+99.99th percentile service time,index-stats,62.072481443841255,ms
+100th percentile service time,index-stats,66.48195599882456,ms
+error rate,index-stats,0.00,%
+Min Throughput,node-stats,1992.73,ops/s
+Mean Throughput,node-stats,1998.76,ops/s
+Median Throughput,node-stats,1998.99,ops/s
+Max Throughput,node-stats,2001.72,ops/s
+50th percentile latency,node-stats,2.9777279996778816,ms
+90th percentile latency,node-stats,4.514182298589731,ms
+99th percentile latency,node-stats,12.545281342008881,ms
+99.9th percentile latency,node-stats,75.49747040544891,ms
+99.99th percentile latency,node-stats,143.9396664717109,ms
+100th percentile latency,node-stats,162.40631400069105,ms
+50th percentile service time,node-stats,2.07445900014136,ms
+90th percentile service time,node-stats,2.9972888993142988,ms
+99th percentile service time,node-stats,4.8447258501619315,ms
+99.9th percentile service time,node-stats,51.290107848068594,ms
+99.99th percentile service time,node-stats,129.19992061460675,ms
+100th percentile service time,node-stats,160.642844000904,ms
+error rate,node-stats,0.00,%
+Min Throughput,match-all,1996.18,ops/s
+Mean Throughput,match-all,1997.78,ops/s
+Median Throughput,match-all,1997.96,ops/s
+Max Throughput,match-all,1998.64,ops/s
+50th percentile latency,match-all,1.8709960004343884,ms
+90th percentile latency,match-all,2.327023299585562,ms
+99th percentile latency,match-all,2.709407030579314,ms
+99.9th percentile latency,match-all,15.926377327199644,ms
+99.99th percentile latency,match-all,36.14454338262199,ms
+100th percentile latency,match-all,37.09252899898274,ms
+50th percentile service time,match-all,1.0808629995153751,ms
+90th percentile service time,match-all,1.330666100329836,ms
+99th percentile service time,match-all,1.5845561306196043,ms
+99.9th percentile service time,match-all,14.047979232961042,ms
+99.99th percentile service time,match-all,35.2313685817303,ms
+100th percentile service time,match-all,36.310043000412406,ms
+error rate,match-all,0.00,%
+Min Throughput,term,1999.08,ops/s
+Mean Throughput,term,1999.52,ops/s
+Median Throughput,term,1999.57,ops/s
+Max Throughput,term,1999.73,ops/s
+50th percentile latency,term,1.8929304997072904,ms
+90th percentile latency,term,2.358598501996312,ms
+99th percentile latency,term,2.7733767812060264,ms
+99.9th percentile latency,term,42.462768697103876,ms
+99.99th percentile latency,term,75.81322647095102,ms
+100th percentile latency,term,89.49184799894283,ms
+50th percentile service time,term,1.094172499506385,ms
+90th percentile service time,term,1.353160299731826,ms
+99th percentile service time,term,1.626311180134508,ms
+99.9th percentile service time,term,40.82351925718105,ms
+99.99th percentile service time,term,75.0509233090589,ms
+100th percentile service time,term,88.36344500014093,ms
+error rate,term,0.00,%
+Min Throughput,phrase,1996.47,ops/s
+Mean Throughput,phrase,1998.14,ops/s
+Median Throughput,phrase,1998.26,ops/s
+Max Throughput,phrase,1999.33,ops/s
+50th percentile latency,phrase,2.0221485010551987,ms
+90th percentile latency,phrase,2.4797151007078355,ms
+99th percentile latency,phrase,2.966227270408127,ms
+99.9th percentile latency,phrase,30.252757329142742,ms
+99.99th percentile latency,phrase,55.51637020253481,ms
+100th percentile latency,phrase,65.00532099926204,ms
+50th percentile service time,phrase,1.2367220006126445,ms
+90th percentile service time,phrase,1.5113903999008471,ms
+99th percentile service time,phrase,1.8351961188636778,ms
+99.9th percentile service time,phrase,28.86140039129387,ms
+99.99th percentile service time,phrase,54.425056716279926,ms
+100th percentile service time,phrase,55.141997001555865,ms
+error rate,phrase,0.00,%
+Min Throughput,country_agg_uncached,264.95,ops/s
+Mean Throughput,country_agg_uncached,267.25,ops/s
+Median Throughput,country_agg_uncached,267.38,ops/s
+Max Throughput,country_agg_uncached,268.81,ops/s
+50th percentile latency,country_agg_uncached,50780.572814500374,ms
+90th percentile latency,country_agg_uncached,58776.37796269901,ms
+99th percentile latency,country_agg_uncached,60569.05211462958,ms
+99.9th percentile latency,country_agg_uncached,60838.7187311257,ms
+100th percentile latency,country_agg_uncached,60965.464530001555,ms
+50th percentile service time,country_agg_uncached,216.88962699954573,ms
+90th percentile service time,country_agg_uncached,290.72705619983026,ms
+99th percentile service time,country_agg_uncached,378.410831389956,ms
+99.9th percentile service time,country_agg_uncached,425.8303365062403,ms
+100th percentile service time,country_agg_uncached,493.2680910005729,ms
+error rate,country_agg_uncached,0.00,%
+Min Throughput,country_agg_cached,1996.37,ops/s
+Mean Throughput,country_agg_cached,1997.70,ops/s
+Median Throughput,country_agg_cached,1997.76,ops/s
+Max Throughput,country_agg_cached,1998.94,ops/s
+50th percentile latency,country_agg_cached,1.6947920030361274,ms
+90th percentile latency,country_agg_cached,2.111121102643665,ms
+99th percentile latency,country_agg_cached,2.4831125227137827,ms
+99.9th percentile latency,country_agg_cached,27.723901865829323,ms
+99.99th percentile latency,country_agg_cached,42.76818944296278,ms
+100th percentile latency,country_agg_cached,43.57645200252591,ms
+50th percentile service time,country_agg_cached,0.894449500265182,ms
+90th percentile service time,country_agg_cached,1.1048120008126716,ms
+99th percentile service time,country_agg_cached,1.3398413992035785,ms
+99.9th percentile service time,country_agg_cached,27.09994419937472,ms
+99.99th percentile service time,country_agg_cached,41.58288951228394,ms
+100th percentile service time,country_agg_cached,42.39042999870435,ms
+error rate,country_agg_cached,0.00,%
+Min Throughput,scroll,1817.33,pages/s
+Mean Throughput,scroll,1850.06,pages/s
+Median Throughput,scroll,1848.95,pages/s
+Max Throughput,scroll,1883.23,pages/s
+50th percentile latency,scroll,208603.1916865004,ms
+90th percentile latency,scroll,244453.60407120115,ms
+99th percentile latency,scroll,252335.71608671988,ms
+99.9th percentile latency,scroll,253780.29531470776,ms
+100th percentile latency,scroll,254033.88293900026,ms
+50th percentile service time,scroll,875.2405129998806,ms
+90th percentile service time,scroll,1077.4724228000196,ms
+99th percentile service time,scroll,1357.5050798989832,ms
+99.9th percentile service time,scroll,1565.049202555414,ms
+100th percentile service time,scroll,1861.9550690000324,ms
+error rate,scroll,0.00,%
+Min Throughput,expression,155.90,ops/s
+Mean Throughput,expression,157.09,ops/s
+Median Throughput,expression,157.12,ops/s
+Max Throughput,expression,157.26,ops/s
+50th percentile latency,expression,93671.6224160009,ms
+90th percentile latency,expression,108607.70605100042,ms
+99th percentile latency,expression,111929.2001698495,ms
+99.9th percentile latency,expression,112659.17511853314,ms
+100th percentile latency,expression,113223.12396100097,ms
+50th percentile service time,expression,415.0095095001234,ms
+90th percentile service time,expression,478.837247800584,ms
+99th percentile service time,expression,581.5248632797012,ms
+99.9th percentile service time,expression,648.4326278868743,ms
+100th percentile service time,expression,675.258200000826,ms
+error rate,expression,0.00,%
+Min Throughput,painless_static,129.58,ops/s
+Mean Throughput,painless_static,130.70,ops/s
+Median Throughput,painless_static,130.69,ops/s
+Max Throughput,painless_static,130.94,ops/s
+50th percentile latency,painless_static,114207.10243300072,ms
+90th percentile latency,painless_static,132306.7736554991,ms
+99th percentile latency,painless_static,136307.57891425918,ms
+99.9th percentile latency,painless_static,137308.3476128481,ms
+100th percentile latency,painless_static,138377.31162400087,ms
+50th percentile service time,painless_static,494.89329700008966,ms
+90th percentile service time,painless_static,573.5362381999948,ms
+99th percentile service time,painless_static,663.4873407896157,ms
+99.9th percentile service time,painless_static,748.8785887576721,ms
+100th percentile service time,painless_static,890.6767909993505,ms
+error rate,painless_static,0.00,%
+Min Throughput,painless_dynamic,127.00,ops/s
+Mean Throughput,painless_dynamic,127.13,ops/s
+Median Throughput,painless_dynamic,127.13,ops/s
+Max Throughput,painless_dynamic,127.25,ops/s
+50th percentile latency,painless_dynamic,117858.42056650016,ms
+90th percentile latency,painless_dynamic,136611.34206410043,ms
+99th percentile latency,painless_dynamic,140752.04150655973,ms
+99.9th percentile latency,painless_dynamic,141576.25770913047,ms
+100th percentile latency,painless_dynamic,141933.28838900197,ms
+50th percentile service time,painless_dynamic,510.1158610004859,ms
+90th percentile service time,painless_dynamic,588.8338641987502,ms
+99th percentile service time,painless_dynamic,679.9941526098338,ms
+99.9th percentile service time,painless_dynamic,770.3332707064233,ms
+100th percentile service time,painless_dynamic,825.1787900007912,ms
+error rate,painless_dynamic,0.00,%
+Min Throughput,decay_geo_gauss_function_score,104.29,ops/s
+Mean Throughput,decay_geo_gauss_function_score,104.68,ops/s
+Median Throughput,decay_geo_gauss_function_score,104.70,ops/s
+Max Throughput,decay_geo_gauss_function_score,104.77,ops/s
+50th percentile latency,decay_geo_gauss_function_score,144677.47591500028,ms
+90th percentile latency,decay_geo_gauss_function_score,167740.72605240106,ms
+99th percentile latency,decay_geo_gauss_function_score,172826.11421945086,ms
+99.9th percentile latency,decay_geo_gauss_function_score,173816.714137619,ms
+100th percentile latency,decay_geo_gauss_function_score,174465.43283400024,ms
+50th percentile service time,decay_geo_gauss_function_score,623.9622010007224,ms
+90th percentile service time,decay_geo_gauss_function_score,711.3244369989843,ms
+99th percentile service time,decay_geo_gauss_function_score,855.1261836890263,ms
+99.9th percentile service time,decay_geo_gauss_function_score,969.9150787824063,ms
+100th percentile service time,decay_geo_gauss_function_score,1007.1227560001716,ms
+error rate,decay_geo_gauss_function_score,0.00,%
+Min Throughput,decay_geo_gauss_script_score,102.62,ops/s
+Mean Throughput,decay_geo_gauss_script_score,103.26,ops/s
+Median Throughput,decay_geo_gauss_script_score,103.27,ops/s
+Max Throughput,decay_geo_gauss_script_score,103.34,ops/s
+50th percentile latency,decay_geo_gauss_script_score,146893.8487935002,ms
+90th percentile latency,decay_geo_gauss_script_score,170287.3962305006,ms
+99th percentile latency,decay_geo_gauss_script_score,175442.98362163935,ms
+99.9th percentile latency,decay_geo_gauss_script_score,176449.25876529032,ms
+100th percentile latency,decay_geo_gauss_script_score,177214.8100129998,ms
+50th percentile service time,decay_geo_gauss_script_score,632.1450894993177,ms
+90th percentile service time,decay_geo_gauss_script_score,720.2129818007962,ms
+99th percentile service time,decay_geo_gauss_script_score,829.1655691907182,ms
+99.9th percentile service time,decay_geo_gauss_script_score,959.7610196437388,ms
+100th percentile service time,decay_geo_gauss_script_score,1070.9530969998013,ms
+error rate,decay_geo_gauss_script_score,0.00,%
+Min Throughput,field_value_function_score,355.49,ops/s
+Mean Throughput,field_value_function_score,358.23,ops/s
+Median Throughput,field_value_function_score,358.42,ops/s
+Max Throughput,field_value_function_score,358.60,ops/s
+50th percentile latency,field_value_function_score,36633.92000100066,ms
+90th percentile latency,field_value_function_score,42470.45761409845,ms
+99th percentile latency,field_value_function_score,43835.73207785845,ms
+99.9th percentile latency,field_value_function_score,44194.126407511554,ms
+100th percentile latency,field_value_function_score,44410.01435700127,ms
+50th percentile service time,field_value_function_score,177.46020199956547,ms
+90th percentile service time,field_value_function_score,226.6001511989089,ms
+99th percentile service time,field_value_function_score,285.3894698213845,ms
+99.9th percentile service time,field_value_function_score,329.18803950095906,ms
+100th percentile service time,field_value_function_score,372.80105500030913,ms
+error rate,field_value_function_score,0.00,%
+Min Throughput,field_value_script_score,273.67,ops/s
+Mean Throughput,field_value_script_score,274.30,ops/s
+Median Throughput,field_value_script_score,274.32,ops/s
+Max Throughput,field_value_script_score,274.52,ops/s
+50th percentile latency,field_value_script_score,50348.35323450079,ms
+90th percentile latency,field_value_script_score,58354.670475501734,ms
+99th percentile latency,field_value_script_score,60247.60212578101,ms
+99.9th percentile latency,field_value_script_score,60827.123463654796,ms
+100th percentile latency,field_value_script_score,61047.521456999675,ms
+50th percentile service time,field_value_script_score,232.4644990003435,ms
+90th percentile service time,field_value_script_score,295.3636722004376,ms
+99th percentile service time,field_value_script_score,368.6496939994142,ms
+99.9th percentile service time,field_value_script_score,402.5953350245474,ms
+100th percentile service time,field_value_script_score,425.05801700099255,ms
+error rate,field_value_script_score,0.00,%
+Min Throughput,large_terms,325.21,ops/s
+Mean Throughput,large_terms,328.80,ops/s
+Median Throughput,large_terms,329.25,ops/s
+Max Throughput,large_terms,331.18,ops/s
+50th percentile latency,large_terms,39829.85694999934,ms
+90th percentile latency,large_terms,46064.30662739931,ms
+99th percentile latency,large_terms,47834.59350148953,ms
+99.9th percentile latency,large_terms,48429.39541312615,ms
+100th percentile latency,large_terms,48670.54129999997,ms
+50th percentile service time,large_terms,173.27084400039894,ms
+90th percentile service time,large_terms,230.80594110142556,ms
+99th percentile service time,large_terms,285.45896191979415,ms
+99.9th percentile service time,large_terms,338.0696343216461,ms
+100th percentile service time,large_terms,401.7837560004409,ms
+error rate,large_terms,0.00,%
+Min Throughput,large_filtered_terms,330.86,ops/s
+Mean Throughput,large_filtered_terms,333.08,ops/s
+Median Throughput,large_filtered_terms,333.16,ops/s
+Max Throughput,large_filtered_terms,334.01,ops/s
+50th percentile latency,large_filtered_terms,39714.29040200019,ms
+90th percentile latency,large_filtered_terms,46008.559721300844,ms
+99th percentile latency,large_filtered_terms,47557.996769391975,ms
+99.9th percentile latency,large_filtered_terms,48098.305337202415,ms
+100th percentile latency,large_filtered_terms,48354.576619,ms
+50th percentile service time,large_filtered_terms,174.50101950089447,ms
+90th percentile service time,large_filtered_terms,234.70361249910638,ms
+99th percentile service time,large_filtered_terms,294.5178652694814,ms
+99.9th percentile service time,large_filtered_terms,357.52261153336894,ms
+100th percentile service time,large_filtered_terms,408.29380600007426,ms
+error rate,large_filtered_terms,0.00,%
+Min Throughput,large_prohibited_terms,336.67,ops/s
+Mean Throughput,large_prohibited_terms,340.33,ops/s
+Median Throughput,large_prohibited_terms,340.49,ops/s
+Max Throughput,large_prohibited_terms,340.67,ops/s
+50th percentile latency,large_prohibited_terms,38970.63419249935,ms
+90th percentile latency,large_prohibited_terms,45183.71818150099,ms
+99th percentile latency,large_prohibited_terms,46801.65870140105,ms
+99.9th percentile latency,large_prohibited_terms,47421.524149394565,ms
+100th percentile latency,large_prohibited_terms,47716.159355000855,ms
+50th percentile service time,large_prohibited_terms,174.54493399964122,ms
+90th percentile service time,large_prohibited_terms,231.5922857991609,ms
+99th percentile service time,large_prohibited_terms,284.5073522911298,ms
+99.9th percentile service time,large_prohibited_terms,317.63425131647057,ms
+100th percentile service time,large_prohibited_terms,397.3400129998481,ms
+error rate,large_prohibited_terms,0.00,%
+Min Throughput,desc_sort_population,1974.99,ops/s
+Mean Throughput,desc_sort_population,1977.89,ops/s
+Median Throughput,desc_sort_population,1978.19,ops/s
+Max Throughput,desc_sort_population,1980.50,ops/s
+50th percentile latency,desc_sort_population,2.974779499709257,ms
+90th percentile latency,desc_sort_population,3.5599953991550137,ms
+99th percentile latency,desc_sort_population,10.020575278704207,ms
+99.9th percentile latency,desc_sort_population,12.088724330416891,ms
+100th percentile latency,desc_sort_population,13.249648000055458,ms
+50th percentile service time,desc_sort_population,2.1907074997216114,ms
+90th percentile service time,desc_sort_population,2.6653743003407726,ms
+99th percentile service time,desc_sort_population,9.382923540306367,ms
+99.9th percentile service time,desc_sort_population,11.189633644131435,ms
+100th percentile service time,desc_sort_population,12.188509001134662,ms
+error rate,desc_sort_population,0.00,%
+Min Throughput,asc_sort_population,1998.07,ops/s
+Mean Throughput,asc_sort_population,1998.31,ops/s
+Median Throughput,asc_sort_population,1998.20,ops/s
+Max Throughput,asc_sort_population,1998.68,ops/s
+50th percentile latency,asc_sort_population,2.276729999721283,ms
+90th percentile latency,asc_sort_population,2.774971199505672,ms
+99th percentile latency,asc_sort_population,3.2525304308001077,ms
+99.9th percentile latency,asc_sort_population,7.2609413321552845,ms
+100th percentile latency,asc_sort_population,8.505872998284758,ms
+50th percentile service time,asc_sort_population,1.5180869995674584,ms
+90th percentile service time,asc_sort_population,1.7993024001043523,ms
+99th percentile service time,asc_sort_population,2.1694658797787305,ms
+99.9th percentile service time,asc_sort_population,6.425407557584664,ms
+100th percentile service time,asc_sort_population,7.594645998324268,ms
+error rate,asc_sort_population,0.00,%
+Min Throughput,asc_sort_with_after_population,1993.83,ops/s
+Mean Throughput,asc_sort_with_after_population,1994.32,ops/s
+Median Throughput,asc_sort_with_after_population,1994.28,ops/s
+Max Throughput,asc_sort_with_after_population,1994.85,ops/s
+50th percentile latency,asc_sort_with_after_population,2.4028910002016346,ms
+90th percentile latency,asc_sort_with_after_population,2.8802340992115205,ms
+99th percentile latency,asc_sort_with_after_population,3.191450368758525,ms
+99.9th percentile latency,asc_sort_with_after_population,3.4092173316876178,ms
+100th percentile latency,asc_sort_with_after_population,3.6137850001978222,ms
+50th percentile service time,asc_sort_with_after_population,1.619672500055458,ms
+90th percentile service time,asc_sort_with_after_population,1.9259622000390666,ms
+99th percentile service time,asc_sort_with_after_population,2.1985681505611865,ms
+99.9th percentile service time,asc_sort_with_after_population,2.391463349436894,ms
+100th percentile service time,asc_sort_with_after_population,2.532597000026726,ms
+error rate,asc_sort_with_after_population,0.00,%
+Min Throughput,desc_sort_geonameid,1991.10,ops/s
+Mean Throughput,desc_sort_geonameid,1992.99,ops/s
+Median Throughput,desc_sort_geonameid,1992.21,ops/s
+Max Throughput,desc_sort_geonameid,1995.66,ops/s
+50th percentile latency,desc_sort_geonameid,2.5388234989804914,ms
+90th percentile latency,desc_sort_geonameid,3.0508496009133528,ms
+99th percentile latency,desc_sort_geonameid,7.96036837911745,ms
+99.9th percentile latency,desc_sort_geonameid,12.258936531116007,ms
+100th percentile latency,desc_sort_geonameid,13.966114998765988,ms
+50th percentile service time,desc_sort_geonameid,1.7576400005054893,ms
+90th percentile service time,desc_sort_geonameid,2.085874500880891,ms
+99th percentile service time,desc_sort_geonameid,7.138683620542048,ms
+99.9th percentile service time,desc_sort_geonameid,11.44702597733533,ms
+100th percentile service time,desc_sort_geonameid,13.130948000252829,ms
+error rate,desc_sort_geonameid,0.00,%
+Min Throughput,desc_sort_with_after_geonameid,1998.22,ops/s
+Mean Throughput,desc_sort_with_after_geonameid,1998.80,ops/s
+Median Throughput,desc_sort_with_after_geonameid,1998.31,ops/s
+Max Throughput,desc_sort_with_after_geonameid,1999.86,ops/s
+50th percentile latency,desc_sort_with_after_geonameid,2.56077850190195,ms
+90th percentile latency,desc_sort_with_after_geonameid,3.0075636992478394,ms
+99th percentile latency,desc_sort_with_after_geonameid,3.3701453707180917,ms
+99.9th percentile latency,desc_sort_with_after_geonameid,14.321381580850414,ms
+100th percentile latency,desc_sort_with_after_geonameid,15.309620999687468,ms
+50th percentile service time,desc_sort_with_after_geonameid,1.760932500474155,ms
+90th percentile service time,desc_sort_with_after_geonameid,2.0858669995504897,ms
+99th percentile service time,desc_sort_with_after_geonameid,2.4089116290088,ms
+99.9th percentile service time,desc_sort_with_after_geonameid,13.398684332029022,ms
+100th percentile service time,desc_sort_with_after_geonameid,14.309662001323886,ms
+error rate,desc_sort_with_after_geonameid,0.00,%
+Min Throughput,asc_sort_geonameid,1989.28,ops/s
+Mean Throughput,asc_sort_geonameid,1990.48,ops/s
+Median Throughput,asc_sort_geonameid,1990.52,ops/s
+Max Throughput,asc_sort_geonameid,1991.63,ops/s
+50th percentile latency,asc_sort_geonameid,2.3963954990904313,ms
+90th percentile latency,asc_sort_geonameid,2.887454700976378,ms
+99th percentile latency,asc_sort_geonameid,3.5527795805137505,ms
+99.9th percentile latency,asc_sort_geonameid,9.874652090860831,ms
+100th percentile latency,asc_sort_geonameid,12.674358000367647,ms
+50th percentile service time,asc_sort_geonameid,1.6332290006175754,ms
+90th percentile service time,asc_sort_geonameid,1.9280651998997203,ms
+99th percentile service time,asc_sort_geonameid,2.374048180317914,ms
+99.9th percentile service time,asc_sort_geonameid,9.367166732537987,ms
+100th percentile service time,asc_sort_geonameid,11.916445000679232,ms
+error rate,asc_sort_geonameid,0.00,%
+Min Throughput,asc_sort_with_after_geonameid,1997.50,ops/s
+Mean Throughput,asc_sort_with_after_geonameid,1997.81,ops/s
+Median Throughput,asc_sort_with_after_geonameid,1997.89,ops/s
+Max Throughput,asc_sort_with_after_geonameid,1998.04,ops/s
+50th percentile latency,asc_sort_with_after_geonameid,2.37969049885578,ms
+90th percentile latency,asc_sort_with_after_geonameid,2.8605342993614613,ms
+99th percentile latency,asc_sort_with_after_geonameid,11.97213521936651,ms
+99.9th percentile latency,asc_sort_with_after_geonameid,14.512108457016451,ms
+100th percentile latency,asc_sort_with_after_geonameid,15.31286200042814,ms
+50th percentile service time,asc_sort_with_after_geonameid,1.5881555000305525,ms
+90th percentile service time,asc_sort_with_after_geonameid,1.8745206001767656,ms
+99th percentile service time,asc_sort_with_after_geonameid,10.943240360029458,ms
+99.9th percentile service time,asc_sort_with_after_geonameid,13.677342698079887,ms
+100th percentile service time,asc_sort_with_after_geonameid,14.324841999041382,ms
+error rate,asc_sort_with_after_geonameid,0.00,%
+Min Throughput,numeric-term-cardinality-agg-high,17.06,ops/s
+Mean Throughput,numeric-term-cardinality-agg-high,17.28,ops/s
+Median Throughput,numeric-term-cardinality-agg-high,17.29,ops/s
+Max Throughput,numeric-term-cardinality-agg-high,17.31,ops/s
+50th percentile latency,numeric-term-cardinality-agg-high,917508.5744054995,ms
+90th percentile latency,numeric-term-cardinality-agg-high,1064055.9604424993,ms
+99th percentile latency,numeric-term-cardinality-agg-high,1104697.476344529,ms
+99.9th percentile latency,numeric-term-cardinality-agg-high,1110757.7797378742,ms
+100th percentile latency,numeric-term-cardinality-agg-high,1113114.7388160008,ms
+50th percentile service time,numeric-term-cardinality-agg-high,3543.748980499913,ms
+90th percentile service time,numeric-term-cardinality-agg-high,4527.765087400621,ms
+99th percentile service time,numeric-term-cardinality-agg-high,5284.364268131105,ms
+99.9th percentile service time,numeric-term-cardinality-agg-high,5680.802044912408,ms
+100th percentile service time,numeric-term-cardinality-agg-high,6089.350476000618,ms
+error rate,numeric-term-cardinality-agg-high,0.00,%
