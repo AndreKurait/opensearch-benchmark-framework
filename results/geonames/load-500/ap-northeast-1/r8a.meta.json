@@ -1,0 +1,22 @@
+{
+  "run_id": "geonames-load-500-r8a",
+  "perm": "r8a",
+  "instance_type": "r8a.8xlarge",
+  "cpu": "AMD Turin",
+  "microarchitecture": "Zen 5",
+  "arch": "x86_64",
+  "vcpus": 32,
+  "physical_cores": 32,
+  "threads_per_core": 1,
+  "memory_gib": 256,
+  "usd_per_hour": 3.08352,
+  "workload": "geonames",
+  "load_level": "load-500",
+  "load_kind": "fixed-rate",
+  "target_throughput": 500,
+  "rep": "ap-northeast-1",
+  "search_clients": 64,
+  "bulk_indexing_clients": 32,
+  "jvm_heap": "26g",
+  "loadgen_type": "c8i.8xlarge"
+}

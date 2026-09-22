@@ -1,6 +1,6 @@
 # OpenSearch 3.5 — 8th-Gen EC2 CPU Architecture Benchmark
 
-**Generated:** 2026-09-22 19:45 UTC  
+**Generated:** 2026-09-22 19:49 UTC  
 **Instance size:** `8xlarge` | **Load generator:** `c8i.8xlarge` (fixed everywhere)  
 **Repetitions:** 7, one per region | **Tool:** OpenSearch Benchmark | **OpenSearch:** 3.5.0 | **EKS Auto Mode + Karpenter**
 
@@ -82,29 +82,29 @@ Offered load is pinned, so **service time is comparable across architectures** h
 
 | perm | CPU | cores | term | phrase | match-all | country_agg_uncached | scroll |
 |---|---|--:|--:|--:|--:|--:|--:|
-| `m8g` | Graviton4 | 32 | 1.509ms [1.484ms–1.587ms] | 1.720ms [1.709ms–1.801ms] | 1.451ms [1.445ms–1.513ms] | 367ms [356ms–379ms] | 700ms [676ms–744ms] |
-| `m8a` | AMD Turin | 32 | 1.360ms [1.330ms–1.504ms] | 1.418ms [1.361ms–1.565ms] | 1.306ms [1.283ms–1.434ms] | 241ms [228ms–242ms] | 698ms [691ms–705ms] |
-| `m8i` | Intel Granite Rapids | 16 | 2.009ms [1.928ms–2.217ms] | 2.057ms [2.010ms–2.225ms] | 1.962ms [1.885ms–2.124ms] | 442ms [436ms–446ms] | 695ms [675ms–729ms] |
-| `c8g` | Graviton4 | 32 | 1.536ms [1.445ms–1.669ms] | 1.808ms [1.659ms–2.008ms] | 1.537ms [1.411ms–1.683ms] | 368ms [359ms–375ms] | 817ms [753ms–862ms] |
+| `m8g` | Graviton4 | 32 | 1.489ms [1.487ms–1.532ms] | 1.709ms [1.709ms–1.730ms] | 1.453ms [1.449ms–1.490ms] | 357ms [354ms–376ms] | 694ms [690ms–706ms] |
+| `m8a` | AMD Turin | 32 | 1.334ms [1.307ms–1.432ms] | 1.472ms [1.390ms–1.572ms] | 1.342ms [1.294ms–1.425ms] | 234ms [225ms–241ms] | 691ms [668ms–701ms] |
+| `m8i` | Intel Granite Rapids | 16 | 2.075ms [1.929ms–2.089ms] | 2.099ms [2.015ms–2.130ms] | 1.919ms [1.910ms–2.015ms] | 446ms [439ms–446ms] | 689ms [633ms–701ms] |
+| `c8g` | Graviton4 | 32 | 1.464ms [1.418ms–1.608ms] | 1.678ms [1.622ms–1.939ms] | 1.429ms [1.378ms–1.645ms] | 375ms [360ms–376ms] | 822ms [773ms–861ms] |
 | `c8a` | AMD Turin | 32 | 1.198ms [1.149ms–1.199ms] | 1.291ms [1.272ms–1.314ms] | 1.247ms [1.238ms–1.265ms] | 241ms [237ms–248ms] | 864ms [860ms–866ms] |
-| `c8i` | Intel Granite Rapids | 16 | 2.017ms [1.940ms–2.092ms] | 2.135ms [1.922ms–2.336ms] | 2.077ms [2.052ms–2.118ms] | 451ms [442ms–458ms] | 778ms [775ms–783ms] |
-| `r8g` | Graviton4 | 32 | 1.432ms [1.426ms–1.450ms] | 1.688ms [1.626ms–1.753ms] | 1.442ms [1.411ms–1.456ms] | 380ms [376ms–386ms] | 812ms [800ms–825ms] |
-| `r8a` | AMD Turin | 32 | 1.187ms [1.159ms–1.250ms] | 1.353ms [1.304ms–1.377ms] | 1.130ms [1.113ms–1.171ms] | 233ms [230ms–235ms] | 806ms [796ms–819ms] |
-| `r8i` | Intel Granite Rapids | 16 | 1.724ms [1.689ms–1.894ms] | 2.209ms [2.190ms–2.234ms] | 1.990ms [1.924ms–2.038ms] | 452ms [436ms–461ms] | 706ms [659ms–753ms] |
+| `c8i` | Intel Granite Rapids | 16 | 2.051ms [1.958ms–2.076ms] | 1.960ms [1.944ms–2.325ms] | 2.069ms [2.000ms–2.085ms] | 450ms [439ms–452ms] | 779ms [776ms–796ms] |
+| `r8g` | Graviton4 | 32 | 1.434ms [1.429ms–1.499ms] | 1.686ms [1.640ms–1.735ms] | 1.452ms [1.433ms–1.454ms] | 380ms [365ms–380ms] | 823ms [802ms–833ms] |
+| `r8a` | AMD Turin | 32 | 1.214ms [1.160ms–1.357ms] | 1.350ms [1.343ms–1.363ms] | 1.146ms [1.114ms–1.247ms] | 231ms [227ms–235ms] | 814ms [797ms–833ms] |
+| `r8i` | Intel Granite Rapids | 16 | 1.757ms [1.692ms–2.018ms] | 2.190ms [2.189ms–2.228ms] | 1.946ms [1.857ms–2.034ms] | 443ms [430ms–461ms] | 671ms [625ms–740ms] |
 
 Achieved vs offered throughput (a shortfall means the cell could not sustain the offered rate, which invalidates its service-time numbers):
 
 | perm | CPU | term | phrase | match-all | country_agg_uncached | scroll |
 |---|---|--:|--:|--:|--:|--:|
-| `m8g` | Graviton4 | 500 | 500 | 500 | **164** ⚠️ | 2,175 |
-| `m8a` | AMD Turin | 500 | 500 | 500 | **245** ⚠️ | 2,168 |
-| `m8i` | Intel Granite Rapids | 500 | 500 | 500 | **137** ⚠️ | 2,214 |
-| `c8g` | Graviton4 | 500 | 500 | 500 | **166** ⚠️ | 1,879 |
+| `m8g` | Graviton4 | 500 | 500 | 500 | **164** ⚠️ | 2,222 |
+| `m8a` | AMD Turin | 500 | 500 | 500 | **247** ⚠️ | 2,227 |
+| `m8i` | Intel Granite Rapids | 500 | 500 | 500 | **137** ⚠️ | 2,255 |
+| `c8g` | Graviton4 | 500 | 500 | 500 | **165** ⚠️ | 1,785 |
 | `c8a` | AMD Turin | 500 | 500 | 500 | **250** ⚠️ | 1,827 |
-| `c8i` | Intel Granite Rapids | 500 | 500 | 500 | **136** ⚠️ | 1,786 |
-| `r8g` | Graviton4 | 500 | 500 | 500 | **164** ⚠️ | 1,816 |
-| `r8a` | AMD Turin | 500 | 500 | 500 | **255** ⚠️ | 2,038 |
-| `r8i` | Intel Granite Rapids | 500 | 500 | 500 | **137** ⚠️ | 1,948 |
+| `c8i` | Intel Granite Rapids | 500 | 500 | 500 | **137** ⚠️ | 1,781 |
+| `r8g` | Graviton4 | 500 | 500 | 500 | **166** ⚠️ | 1,789 |
+| `r8a` | AMD Turin | 500 | 500 | 500 | **257** ⚠️ | 1,990 |
+| `r8i` | Intel Granite Rapids | 500 | 500 | 500 | **136** ⚠️ | 2,035 |
 
 ### Scaling across load levels (term query)
 
@@ -130,13 +130,13 @@ Percentages appear only where the interquartile ranges of the two medians do not
 |---|---|---|--:|--:|--:|--:|
 | m | (indexing) | index time | — | — | insufficient reps | — |
 | m | `load-2000` | term service time | — | — | insufficient reps | — |
-| m | `load-500` | term service time | 1.509ms [1.484ms–1.587ms] | 1.360ms [1.330ms–1.504ms] | within noise | — |
+| m | `load-500` | term service time | 1.489ms [1.487ms–1.532ms] | 1.334ms [1.307ms–1.432ms] | +10.4% | -25.2% |
 | c | (indexing) | index time | — | — | insufficient reps | — |
 | c | `load-2000` | term service time | — | — | insufficient reps | — |
-| c | `load-500` | term service time | 1.536ms [1.445ms–1.669ms] | 1.198ms [1.149ms–1.199ms] | +22.0% | -13.6% |
+| c | `load-500` | term service time | 1.464ms [1.418ms–1.608ms] | 1.198ms [1.149ms–1.199ms] | +18.2% | -17.4% |
 | r | (indexing) | index time | — | — | insufficient reps | — |
 | r | `load-2000` | term service time | — | — | insufficient reps | — |
-| r | `load-500` | term service time | 1.432ms [1.426ms–1.450ms] | 1.187ms [1.159ms–1.250ms] | +17.1% | -18.5% |
+| r | `load-500` | term service time | 1.434ms [1.429ms–1.499ms] | 1.214ms [1.160ms–1.357ms] | +15.4% | -20.2% |
 
 *price-adjusted* = performance delta minus the on-demand price delta. Negative means the faster instance is not worth its premium at list price. The price delta is region-invariant within a family (see the price table), so one figure is valid for all regions.
 
@@ -147,11 +147,11 @@ Each region is an independent repetition on independent hardware. Below, each re
 | family | load level | regions favouring Turin | favouring Graviton4 | verdict |
 |---|---|--:|--:|---|
 | m | `load-2000` | 1 | 0 | **unanimous: Turin** (1/1) |
-| m | `load-500` | 3 | 0 | **unanimous: Turin** (3/3) |
+| m | `load-500` | 4 | 0 | **unanimous: Turin** (4/4) |
 | c | `load-2000` | 1 | 0 | **unanimous: Turin** (1/1) |
 | c | `load-500` | 3 | 0 | **unanimous: Turin** (3/3) |
 | r | `load-2000` | 1 | 0 | **unanimous: Turin** (1/1) |
-| r | `load-500` | 4 | 0 | **unanimous: Turin** (4/4) |
+| r | `load-500` | 5 | 0 | **unanimous: Turin** (5/5) |
 
 A split vote overrides any percentage in the table above: if regions disagree on the direction, the effect is within regional noise regardless of what the pooled IQRs show.
 
@@ -159,7 +159,7 @@ A split vote overrides any percentage in the table above: if regions disagree on
 
 All collected runs passed validity checks (error rate ≤ 0.1%, doc counts verified, no ignored workload params, OSB exit 0).
 
-43 run(s) included but with a weakened audit trail:
+51 run(s) included but with a weakened audit trail:
 
 | workload | load | rep | perm | caveat |
 |---|---|---|---|---|
@@ -172,17 +172,21 @@ All collected runs passed validity checks (error rate ≤ 0.1%, doc counts verif
 | geonames | load-2000 | eu-south-2 | r8g | doc count unverified (probe could not reach cluster) |
 | geonames | load-2000 | eu-south-2 | r8a | doc count unverified (probe could not reach cluster) |
 | geonames | load-2000 | eu-south-2 | r8i | doc count unverified (probe could not reach cluster) |
+| geonames | load-500 | ap-northeast-1 | m8g | doc count unverified (probe could not reach cluster) |
 | geonames | load-500 | eu-central-1 | m8g | doc count unverified (probe could not reach cluster) |
 | geonames | load-500 | eu-south-2 | m8g | doc count unverified (probe could not reach cluster) |
 | geonames | load-500 | eu-west-1 | m8g | doc count unverified (probe could not reach cluster) |
 | geonames | load-500 | us-west-2 | m8g | doc count unverified (probe could not reach cluster) |
+| geonames | load-500 | ap-northeast-1 | m8a | doc count unverified (probe could not reach cluster) |
 | geonames | load-500 | eu-central-1 | m8a | doc count unverified (probe could not reach cluster) |
 | geonames | load-500 | eu-south-2 | m8a | doc count unverified (probe could not reach cluster) |
 | geonames | load-500 | eu-west-1 | m8a | doc count unverified (probe could not reach cluster) |
+| geonames | load-500 | ap-northeast-1 | m8i | doc count unverified (probe could not reach cluster) |
 | geonames | load-500 | eu-central-1 | m8i | doc count unverified (probe could not reach cluster) |
 | geonames | load-500 | eu-south-2 | m8i | doc count unverified (probe could not reach cluster) |
 | geonames | load-500 | eu-west-1 | m8i | doc count unverified (probe could not reach cluster) |
 | geonames | load-500 | us-west-2 | m8i | doc count unverified (probe could not reach cluster) |
+| geonames | load-500 | ap-northeast-1 | c8g | doc count unverified (probe could not reach cluster) |
 | geonames | load-500 | eu-central-1 | c8g | doc count unverified (probe could not reach cluster) |
 | geonames | load-500 | eu-south-2 | c8g | doc count unverified (probe could not reach cluster) |
 | geonames | load-500 | eu-west-1 | c8g | doc count unverified (probe could not reach cluster) |
@@ -190,18 +194,22 @@ All collected runs passed validity checks (error rate ≤ 0.1%, doc counts verif
 | geonames | load-500 | eu-south-2 | c8a | doc count unverified (probe could not reach cluster) |
 | geonames | load-500 | eu-west-1 | c8a | doc count unverified (probe could not reach cluster) |
 | geonames | load-500 | us-west-2 | c8a | doc count unverified (probe could not reach cluster) |
+| geonames | load-500 | ap-northeast-1 | c8i | doc count unverified (probe could not reach cluster) |
 | geonames | load-500 | eu-central-1 | c8i | doc count unverified (probe could not reach cluster) |
 | geonames | load-500 | eu-south-2 | c8i | doc count unverified (probe could not reach cluster) |
 | geonames | load-500 | eu-west-1 | c8i | doc count unverified (probe could not reach cluster) |
 | geonames | load-500 | us-west-2 | c8i | doc count unverified (probe could not reach cluster) |
+| geonames | load-500 | ap-northeast-1 | r8g | doc count unverified (probe could not reach cluster) |
 | geonames | load-500 | eu-central-1 | r8g | doc count unverified (probe could not reach cluster) |
 | geonames | load-500 | eu-south-2 | r8g | doc count unverified (probe could not reach cluster) |
 | geonames | load-500 | eu-west-1 | r8g | doc count unverified (probe could not reach cluster) |
 | geonames | load-500 | us-west-2 | r8g | doc count unverified (probe could not reach cluster) |
+| geonames | load-500 | ap-northeast-1 | r8a | doc count unverified (probe could not reach cluster) |
 | geonames | load-500 | eu-central-1 | r8a | doc count unverified (probe could not reach cluster) |
 | geonames | load-500 | eu-south-2 | r8a | doc count unverified (probe could not reach cluster) |
 | geonames | load-500 | eu-west-1 | r8a | doc count unverified (probe could not reach cluster) |
 | geonames | load-500 | us-west-2 | r8a | doc count unverified (probe could not reach cluster) |
+| geonames | load-500 | ap-northeast-1 | r8i | doc count unverified (probe could not reach cluster) |
 | geonames | load-500 | eu-central-1 | r8i | doc count unverified (probe could not reach cluster) |
 | geonames | load-500 | eu-south-2 | r8i | doc count unverified (probe could not reach cluster) |
 | geonames | load-500 | eu-west-1 | r8i | doc count unverified (probe could not reach cluster) |
@@ -209,4 +217,4 @@ All collected runs passed validity checks (error rate ≤ 0.1%, doc counts verif
 
 `doc count unverified (probe could not reach cluster)` means the in-pod probe failed, not that the data is wrong: the opensearch-benchmark image ships no `curl`, so every probe request returned empty. Doc counts for these runs were instead verified out-of-band directly against each cluster, and came back identical (11,396,503 documents, 3/3 shards successful) on Graviton, AMD and Intel alike. The probe is fixed for subsequent runs.
 
-*Generated 2026-09-22 19:45 UTC — [opensearch-benchmark-framework](https://github.com/AndreKurait/opensearch-benchmark-framework)*
+*Generated 2026-09-22 19:49 UTC — [opensearch-benchmark-framework](https://github.com/AndreKurait/opensearch-benchmark-framework)*
