@@ -17,7 +17,14 @@ REGION="${BENCH_REGION:?BENCH_REGION must be set}"
 CONFIG="k8s/generated/${REGION}/config.json"
 [[ -f "$CONFIG" ]] || { echo "Run: BENCH_REGION=$REGION python3 scripts/generate.py"; exit 1; }
 
-PERMS=$(jq -r '.permutations[]' "$CONFIG")
+# Match the set that was actually benchmarked (see deploy.sh's degrade path), so a
+# type EKS Auto Mode refused to launch is absent from the results rather than
+# recorded as a MISSING failure it never had a chance to be.
+if [[ -f "k8s/generated/${REGION}/available.txt" ]]; then
+  PERMS=$(cat "k8s/generated/${REGION}/available.txt")
+else
+  PERMS=$(jq -r '.permutations[]' "$CONFIG")
+fi
 DIR="results/${WORKLOAD}/${LOAD}/${REGION}"
 mkdir -p "$DIR"
 
@@ -26,6 +33,12 @@ mkdir -p "$DIR"
 jq '{region, az, size, loadgen_type, rep, ebs, fixed,
      prices: (.perm_details | map_values(.usd_per_hour))}' \
    "$CONFIG" > "$DIR/cell.meta.json"
+
+# Make the gap self-describing: a reader of the raw data must be able to tell
+# "this type was never benchmarked here" apart from "this type performed badly".
+if [[ -f "k8s/generated/${REGION}/unavailable.txt" ]]; then
+  cp "k8s/generated/${REGION}/unavailable.txt" "$DIR/unavailable-types.txt"
+fi
 
 echo "==> [$REGION] collecting ${WORKLOAD}/${LOAD}"
 OK=0

@@ -22,8 +22,17 @@ GEN="k8s/generated/${REGION}"
 CONFIG="${GEN}/config.json"
 [[ -f "$CONFIG" ]] || { echo "Run: BENCH_REGION=$REGION python3 scripts/generate.py"; exit 1; }
 
-PERMS=$(jq -r '.permutations[]' "$CONFIG")
-COUNT=$(echo "$PERMS" | wc -l | tr -d ' ')
+# deploy.sh writes available.txt when EKS Auto Mode refused to launch one or more
+# instance types, so this region runs a reduced matrix instead of being thrown
+# away. Absent the file, every permutation came up and all nine are in play.
+if [[ -f "${GEN}/available.txt" ]]; then
+  PERMS=$(cat "${GEN}/available.txt")
+  echo "==> [$REGION] DEGRADED matrix: $(echo "$PERMS" | wc -w | tr -d ' ') permutations"
+  [[ -f "${GEN}/unavailable.txt" ]] && echo "    missing: $(tr '\n' ' ' < "${GEN}/unavailable.txt")"
+else
+  PERMS=$(jq -r '.permutations[]' "$CONFIG")
+fi
+COUNT=$(echo "$PERMS" | wc -w | tr -d ' ')
 LOADS=$(jq -r '.load_levels | keys_unsorted[]' "$CONFIG")
 NLOADS=$(echo "$LOADS" | wc -l | tr -d ' ')
 AZ=$(jq -r '.az' "$CONFIG")
@@ -58,6 +67,17 @@ for LOAD in $LOADS; do
 
   echo "==> [$REGION $LOAD] launching $COUNT jobs"
   kubectl apply -f "$JOBS_FILE" >/dev/null
+
+  # The manifest is generated for the full matrix, so on a degraded region it also
+  # contains jobs for permutations that have no nodes. Left alone they sit Pending
+  # for the whole cell, keeping Karpenter retrying a launch that cannot succeed.
+  if [[ -f "${GEN}/unavailable.txt" ]]; then
+    while read -r dead; do
+      [[ -n "$dead" ]] || continue
+      kubectl delete jobs -n default -l "workload=$WORKLOAD,load=$LOAD,perm=$dead" \
+        --ignore-not-found >/dev/null 2>&1 || true
+    done < "${GEN}/unavailable.txt"
+  fi
 
   DEADLINE=$(( $(date +%s) + 10800 ))   # 3h ceiling per cell
   while true; do

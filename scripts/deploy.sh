@@ -78,9 +78,46 @@ while true; do
   echo "  [$REGION $(date -u '+%H:%M:%S')] opensearch pods ready: $ready/$TARGET | loadgen nodes: $lg"
   [[ "$ready" -ge "$TARGET" ]] && break
   if (( $(date +%s) > DEADLINE )); then
+    # Degrade, do not die. EKS Auto Mode's managed compute catalog refuses some
+    # 8th-gen types in some AZs even though EC2 itself offers them there
+    # (observed: m8a.8xlarge in us-west-2, c8a.8xlarge in eu-central-1 and
+    # ap-northeast-1, all reporting NoCompatibleInstanceTypes). Previously that
+    # made deploy exit 1, the trap fired, and an ENTIRE repetition was destroyed
+    # over one missing arm -- two of four regions lost that way. The other eight
+    # permutations were healthy and would have produced valid data.
+    #
+    # So: drop the permutations that never came up, record them, and benchmark
+    # the rest. A cell backed by fewer repetitions is still usable as long as the
+    # report says so; a destroyed region is not usable at all.
     echo "  !! [$REGION] timed out waiting for pods; showing pending pods:"
     kubectl get pods -A --field-selector=status.phase=Pending --no-headers 2>/dev/null | head -20
-    exit 1
+
+    AVAIL=""; MISSING=""
+    for pk in $PERMS; do
+      n=$(kubectl get pods -n "os-${pk}" --no-headers 2>/dev/null \
+          | grep -c '1/1 *Running' || true)
+      if [[ "${n:-0}" -ge 3 ]]; then AVAIL="$AVAIL $pk"; else MISSING="$MISSING $pk"; fi
+    done
+    NAVAIL=$(echo "$AVAIL" | wc -w | tr -d ' ')
+
+    # Below this, the surviving matrix is too thin to be worth the spend: the
+    # whole point is comparing Graviton against AMD against Intel, and a handful
+    # of arms cannot support that.
+    MIN_PERMS="${MIN_PERMS:-6}"
+    if (( NAVAIL < MIN_PERMS )); then
+      echo "  !! [$REGION] only $NAVAIL/$COUNT permutations came up (<$MIN_PERMS); abandoning region."
+      exit 1
+    fi
+
+    echo "  !! [$REGION] DEGRADED: continuing with $NAVAIL/$COUNT permutations."
+    echo "  !! [$REGION] unavailable (EKS Auto Mode would not launch them):$MISSING"
+    # Recorded so run.sh/collect.sh target the surviving set and so the report can
+    # state plainly which arms this repetition is missing.
+    echo "$AVAIL" | tr ' ' '\n' | grep -v '^$' > "${GEN}/available.txt"
+    printf '%s\n' $MISSING > "${GEN}/unavailable.txt"
+    PERMS="$AVAIL"
+    COUNT="$NAVAIL"
+    break
   fi
   sleep 30
 done
