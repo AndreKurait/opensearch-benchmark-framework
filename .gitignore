@@ -52,3 +52,7 @@ ca.cnf
 probe/
 libtest/
 ca/
+
+# The raw OSB logs under results/ ARE the audit trail (exit codes, param
+# warnings, task timings); the *.log rule above is for stray build logs only.
+!results/**/*.log

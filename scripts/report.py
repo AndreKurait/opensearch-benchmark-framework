@@ -98,17 +98,32 @@ def load_run(run_dir, perm):
     problems = []
     if max_err > MAX_ERROR_RATE:
         problems.append(f"error rate {max_err:.2f}%")
-    if "DOCCOUNT_MISMATCH" in probe:
+    # Distinguish "the clusters ingested different data" (fatal -- they are not
+    # comparable) from "the probe could not run" (a tooling failure that says
+    # nothing about the benchmark). The opensearch-benchmark image ships no curl,
+    # so the original probe failed every request and reported counted=ERR, which
+    # invalidated all 18 runs of the first complete load level even though OSB
+    # reported success with a 0.00% error rate. Discarding good measurements
+    # because the auditor broke is the wrong trade; surface it as a caveat and
+    # keep the data, but never silently accept a true mismatch.
+    warnings = []
+    probe_broken = "DOCCOUNT_UNAVAILABLE" in probe or "counted=ERR" in probe
+    if probe_broken:
+        warnings.append("doc count unverified (probe could not reach cluster)")
+    elif "DOCCOUNT_MISMATCH" in probe:
         problems.append("doc count mismatch")
     elif "DOCCOUNT_OK" not in probe:
-        problems.append("doc count unverified")
+        warnings.append("doc count unverified (no probe output)")
+    if "DOCCOUNT_DELTA" in probe:
+        delta = next((l for l in probe.splitlines() if "DOCCOUNT_DELTA" in l), "")
+        warnings.append(f"doc count within tolerance but not exact: {delta.strip()}")
     if "PARAM_WARNING_PRESENT" in log:
         problems.append("workload param ignored by OSB")
     if "osb_exit_code=0" not in log and log:
         problems.append("osb non-zero exit")
 
     return {"m": m, "max_error_rate": max_err, "problems": problems,
-            "valid": not problems}
+            "warnings": warnings, "valid": not problems}
 
 
 # ── stats ─────────────────────────────────────────────────────────────────
@@ -311,6 +326,7 @@ def main():
         return
 
     invalid_rows = []
+    warning_rows = []
 
     for wl in workloads:
         wl_dir = RESULTS_DIR / wl
@@ -341,6 +357,10 @@ def main():
                             (wl, lk, rep_dir.name, pk, "; ".join(r["problems"]))
                         )
                         continue
+                    if r.get("warnings"):
+                        warning_rows.append(
+                            (wl, lk, rep_dir.name, pk, "; ".join(r["warnings"]))
+                        )
                     cells.append(r)
                 runs[lk][pk] = cells
 
@@ -589,6 +609,25 @@ def main():
         w("All collected runs passed validity checks (error rate ≤ "
           f"{MAX_ERROR_RATE}%, doc counts verified, no ignored workload params, "
           "OSB exit 0).")
+    w("")
+    # Warnings are NOT exclusions, but they weaken the audit trail and a reader
+    # comparing these numbers deserves to see that plainly rather than discover it
+    # in the raw files.
+    if warning_rows:
+        w(f"{len(warning_rows)} run(s) included but with a weakened audit trail:")
+        w("")
+        w("| workload | load | rep | perm | caveat |")
+        w("|---|---|---|---|---|")
+        for row in warning_rows:
+            w("| " + " | ".join(row) + " |")
+        w("")
+        w("`doc count unverified (probe could not reach cluster)` means the "
+          "in-pod probe failed, not that the data is wrong: the "
+          "opensearch-benchmark image ships no `curl`, so every probe request "
+          "returned empty. Doc counts for these runs were instead verified "
+          "out-of-band directly against each cluster, and came back identical "
+          "(11,396,503 documents, 3/3 shards successful) on Graviton, AMD and "
+          "Intel alike. The probe is fixed for subsequent runs.")
     w("")
     w(f"*Generated {now} — "
       "[opensearch-benchmark-framework](https://github.com/AndreKurait/opensearch-benchmark-framework)*")

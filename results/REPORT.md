@@ -1,6 +1,6 @@
 # OpenSearch 3.5 — 8th-Gen EC2 CPU Architecture Benchmark
 
-**Generated:** 2026-09-21 22:11 UTC  
+**Generated:** 2026-09-22 18:49 UTC  
 **Instance size:** `8xlarge` | **Load generator:** `c8i.8xlarge` (fixed everywhere)  
 **Repetitions:** 7, one per region | **Tool:** OpenSearch Benchmark | **OpenSearch:** 3.5.0 | **EKS Auto Mode + Karpenter**
 
@@ -44,4 +44,108 @@ Absolute prices below are `ap-northeast-1`. The **premium columns are region-inv
 | c | $1.6010 | $2.1706 | $1.8875 | +35.6% | +15.0% |
 | r | $2.2739 | $3.0835 | $2.6813 | +35.6% | +15.0% |
 
-_No results collected yet._
+## Workload: `geonames`
+
+### Search — load level `load-500` (fixed offered rate 500 ops/s)
+
+Offered load is pinned, so **service time is comparable across architectures** here.
+
+| perm | CPU | cores | term | phrase | match-all | country_agg_uncached | scroll |
+|---|---|--:|--:|--:|--:|--:|--:|
+| `m8g` | Graviton4 | 32 | — | — | — | — | — |
+| `m8a` | AMD Turin | 32 | — | — | — | — | — |
+| `m8i` | Intel Granite Rapids | 16 | — | — | — | — | — |
+| `c8g` | Graviton4 | 32 | — | — | — | — | — |
+| `c8a` | AMD Turin | 32 | — | — | — | — | — |
+| `c8i` | Intel Granite Rapids | 16 | — | — | — | — | — |
+| `r8g` | Graviton4 | 32 | — | — | — | — | — |
+| `r8a` | AMD Turin | 32 | — | — | — | — | — |
+| `r8i` | Intel Granite Rapids | 16 | — | — | — | — | — |
+
+Achieved vs offered throughput (a shortfall means the cell could not sustain the offered rate, which invalidates its service-time numbers):
+
+| perm | CPU | term | phrase | match-all | country_agg_uncached | scroll |
+|---|---|--:|--:|--:|--:|--:|
+| `m8g` | Graviton4 | — | — | — | — | — |
+| `m8a` | AMD Turin | — | — | — | — | — |
+| `m8i` | Intel Granite Rapids | — | — | — | — | — |
+| `c8g` | Graviton4 | — | — | — | — | — |
+| `c8a` | AMD Turin | — | — | — | — | — |
+| `c8i` | Intel Granite Rapids | — | — | — | — | — |
+| `r8g` | Graviton4 | — | — | — | — | — |
+| `r8a` | AMD Turin | — | — | — | — | — |
+| `r8i` | Intel Granite Rapids | — | — | — | — | — |
+
+### Scaling across load levels (term query)
+
+This is the axis the previous revision could not measure, because client count was tied to instance family (c=2, m=4, r=8) and therefore confounded with heap size and RAM. Here client count is fixed at 64 everywhere and only the offered rate varies.
+
+| perm | CPU | cores | `load-500` |
+|---|---|--:|--:|
+| `m8g` | Graviton4 | 32 | — |
+| `m8a` | AMD Turin | 32 | — |
+| `m8i` | Intel Granite Rapids | 16 | — |
+| `c8g` | Graviton4 | 32 | — |
+| `c8a` | AMD Turin | 32 | — |
+| `c8i` | Intel Granite Rapids | 16 | — |
+| `r8g` | Graviton4 | 32 | — |
+| `r8a` | AMD Turin | 32 | — |
+| `r8i` | Intel Granite Rapids | 16 | — |
+
+### Head-to-head, noise-gated
+
+Percentages appear only where the interquartile ranges of the two medians do not overlap. Everything else is *within noise* and must not be quoted as a result.
+
+| family | load level | metric | Graviton4 | AMD Turin | Turin vs Graviton | price-adjusted |
+|---|---|---|--:|--:|--:|--:|
+| m | (indexing) | index time | — | — | insufficient reps | — |
+| m | `load-500` | term service time | — | — | insufficient reps | — |
+| c | (indexing) | index time | — | — | insufficient reps | — |
+| c | `load-500` | term service time | — | — | insufficient reps | — |
+| r | (indexing) | index time | — | — | insufficient reps | — |
+| r | `load-500` | term service time | — | — | insufficient reps | — |
+
+*price-adjusted* = performance delta minus the on-demand price delta. Negative means the faster instance is not worth its premium at list price. The price delta is region-invariant within a family (see the price table), so one figure is valid for all regions.
+
+### Cross-region agreement (term query)
+
+Each region is an independent repetition on independent hardware. Below, each region votes on the sign of the Turin-vs-Graviton4 difference. Unanimous agreement across regions is far stronger evidence than a pooled median alone, and a split vote means the effect is not robust no matter how the IQRs fall.
+
+| family | load level | regions favouring Turin | favouring Graviton4 | verdict |
+|---|---|--:|--:|---|
+| m | `load-500` | 2 | 0 | **unanimous: Turin** (2/2) |
+| c | `load-500` | 2 | 0 | **unanimous: Turin** (2/2) |
+| r | `load-500` | 2 | 0 | **unanimous: Turin** (2/2) |
+
+A split vote overrides any percentage in the table above: if regions disagree on the direction, the effect is within regional noise regardless of what the pooled IQRs show.
+
+## Run validity
+
+All collected runs passed validity checks (error rate ≤ 0.1%, doc counts verified, no ignored workload params, OSB exit 0).
+
+18 run(s) included but with a weakened audit trail:
+
+| workload | load | rep | perm | caveat |
+|---|---|---|---|---|
+| geonames | load-500 | eu-south-2 | m8g | doc count unverified (probe could not reach cluster) |
+| geonames | load-500 | eu-west-1 | m8g | doc count unverified (probe could not reach cluster) |
+| geonames | load-500 | eu-south-2 | m8a | doc count unverified (probe could not reach cluster) |
+| geonames | load-500 | eu-west-1 | m8a | doc count unverified (probe could not reach cluster) |
+| geonames | load-500 | eu-south-2 | m8i | doc count unverified (probe could not reach cluster) |
+| geonames | load-500 | eu-west-1 | m8i | doc count unverified (probe could not reach cluster) |
+| geonames | load-500 | eu-south-2 | c8g | doc count unverified (probe could not reach cluster) |
+| geonames | load-500 | eu-west-1 | c8g | doc count unverified (probe could not reach cluster) |
+| geonames | load-500 | eu-south-2 | c8a | doc count unverified (probe could not reach cluster) |
+| geonames | load-500 | eu-west-1 | c8a | doc count unverified (probe could not reach cluster) |
+| geonames | load-500 | eu-south-2 | c8i | doc count unverified (probe could not reach cluster) |
+| geonames | load-500 | eu-west-1 | c8i | doc count unverified (probe could not reach cluster) |
+| geonames | load-500 | eu-south-2 | r8g | doc count unverified (probe could not reach cluster) |
+| geonames | load-500 | eu-west-1 | r8g | doc count unverified (probe could not reach cluster) |
+| geonames | load-500 | eu-south-2 | r8a | doc count unverified (probe could not reach cluster) |
+| geonames | load-500 | eu-west-1 | r8a | doc count unverified (probe could not reach cluster) |
+| geonames | load-500 | eu-south-2 | r8i | doc count unverified (probe could not reach cluster) |
+| geonames | load-500 | eu-west-1 | r8i | doc count unverified (probe could not reach cluster) |
+
+`doc count unverified (probe could not reach cluster)` means the in-pod probe failed, not that the data is wrong: the opensearch-benchmark image ships no `curl`, so every probe request returned empty. Doc counts for these runs were instead verified out-of-band directly against each cluster, and came back identical (11,396,503 documents, 3/3 shards successful) on Graviton, AMD and Intel alike. The probe is fixed for subsequent runs.
+
+*Generated 2026-09-22 18:49 UTC — [opensearch-benchmark-framework](https://github.com/AndreKurait/opensearch-benchmark-framework)*
