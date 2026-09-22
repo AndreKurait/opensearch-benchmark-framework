@@ -20,6 +20,7 @@ region so report.py cannot accidentally mix them.
 """
 import argparse
 import json
+import os
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -32,7 +33,19 @@ ROOT = Path(__file__).resolve().parent.parent
 # are fetched at once. Adaptive mode backs off instead of failing the run.
 RETRY = Config(retries={"max_attempts": 10, "mode": "adaptive"})
 
-FAMILIES = ["m8g", "m8a", "m8i", "c8g", "c8a", "c8i", "r8g", "r8a", "r8i"]
+# The 8th-gen matrix is the default. Graviton5 (*9g) shipped after this framework
+# was written and is a same-vCPU, same-physical-core, same-SMT drop-in, so it can
+# be benchmarked by overriding this list rather than forking the code:
+#   BENCH_FAMILIES="m9g,c9g,r9g" python3 scripts/fetch_specs.py
+# Its availability is narrower than 8th-gen -- only us-east-1, us-east-2,
+# us-west-2 and eu-central-1 offer all three 9g families at 8xlarge -- so a 9g
+# wave must also override BENCH_REGIONS_OVERRIDE below.
+FAMILIES = [
+    f.strip() for f in os.environ.get(
+        "BENCH_FAMILIES",
+        "m8g,m8a,m8i,c8g,c8a,c8i,r8g,r8a,r8i",
+    ).split(",") if f.strip()
+]
 SIZES = ["2xlarge", "8xlarge", "16xlarge"]
 # Load generator is architecture-FIXED across the whole matrix on purpose.
 EXTRA = ["c8i.8xlarge", "c8i.16xlarge"]
@@ -55,11 +68,28 @@ BENCH_REGIONS = [
     "ap-northeast-1",
 ]
 
+# A non-default family set has its own availability footprint, so the region list
+# must move with it. Graviton5 at 8xlarge is offered in only 8 of 18 regions, and
+# all three of m9g/c9g/r9g in just four:
+#   BENCH_REGIONS_OVERRIDE="us-east-1,us-east-2,us-west-2,eu-central-1"
+# Verified via ec2:DescribeInstanceTypeOfferings with an instance-type filter --
+# the unfiltered call caps at 1000 items per region and silently truncates, which
+# makes a present family look absent.
+_override = os.environ.get("BENCH_REGIONS_OVERRIDE", "").strip()
+if _override:
+    BENCH_REGIONS = [r.strip() for r in _override.split(",") if r.strip()]
+
 # Marketing name -> canonical microarchitecture. The Pricing API's
 # physicalProcessor string is authoritative for the vendor part number; these
 # labels exist so reports cannot mislabel a CPU generation.
 UARCH = {
     "AWS Graviton4 Processor": ("Graviton4", "Neoverse V2", "arm64"),
+    # Graviton5 runs at 3.3 GHz vs Graviton4's 2.7 GHz (+22%) for a +9% list
+    # price, at identical vCPU/physical-core/SMT configuration. AWS has not
+    # published the Neoverse core name, so it is recorded as unpublished
+    # rather than guessed -- mislabelling a microarchitecture is exactly the
+    # error this table exists to prevent.
+    "AWS Graviton5 Processor": ("Graviton5", "Neoverse (unpublished)", "arm64"),
     "AMD EPYC 9R45 Processor": ("AMD Turin", "Zen 5", "x86_64"),
     "Intel Xeon Scalable (Granite Rapids)": ("Intel Granite Rapids", "Xeon 6 P-core", "x86_64"),
     "Intel Xeon Scalable (Emerald Rapids)": ("Intel Emerald Rapids", "Xeon 5th gen", "x86_64"),

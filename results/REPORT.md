@@ -1,6 +1,6 @@
 # OpenSearch 3.5 — 8th-Gen EC2 CPU Architecture Benchmark
 
-**Generated:** 2026-09-22 19:53 UTC  
+**Generated:** 2026-09-22 21:00 UTC  
 **Instance size:** `8xlarge` | **Load generator:** `c8i.8xlarge` (fixed everywhere)  
 **Repetitions:** 7, one per region | **Tool:** OpenSearch Benchmark | **OpenSearch:** 3.5.0 | **EKS Auto Mode + Karpenter**
 
@@ -126,32 +126,47 @@ This is the axis the previous revision could not measure, because client count w
 
 Percentages appear only where the interquartile ranges of the two medians do not overlap. Everything else is *within noise* and must not be quoted as a result.
 
-| family | load level | metric | Graviton4 | AMD Turin | Turin vs Graviton | price-adjusted |
-|---|---|---|--:|--:|--:|--:|
-| m | (indexing) | index time | — | — | insufficient reps | — |
-| m | `load-2000` | term service time | — | — | insufficient reps | — |
-| m | `load-500` | term service time | 1.489ms [1.487ms–1.532ms] | 1.334ms [1.307ms–1.432ms] | +10.4% | -25.2% |
-| c | (indexing) | index time | — | — | insufficient reps | — |
-| c | `load-2000` | term service time | — | — | insufficient reps | — |
-| c | `load-500` | term service time | 1.464ms [1.418ms–1.608ms] | 1.198ms [1.149ms–1.199ms] | +18.2% | -17.4% |
-| r | (indexing) | index time | — | — | insufficient reps | — |
-| r | `load-2000` | term service time | — | — | insufficient reps | — |
-| r | `load-500` | term service time | 1.434ms [1.429ms–1.499ms] | 1.214ms [1.160ms–1.357ms] | +15.4% | -20.2% |
+| family | comparison | load level | metric | baseline | challenger | challenger vs baseline | price-adjusted |
+|---|---|---|---|--:|--:|--:|--:|
+| m | Turin vs Graviton4 | (indexing) | index time | — | — | insufficient reps | — |
+| m | Turin vs Graviton4 | `load-2000` | term service time | — | — | insufficient reps | — |
+| m | Turin vs Graviton4 | `load-500` | term service time | 1.489ms [1.487ms–1.532ms] | 1.334ms [1.307ms–1.432ms] | +10.4% | -25.2% |
+| c | Turin vs Graviton4 | (indexing) | index time | — | — | insufficient reps | — |
+| c | Turin vs Graviton4 | `load-2000` | term service time | — | — | insufficient reps | — |
+| c | Turin vs Graviton4 | `load-500` | term service time | 1.464ms [1.418ms–1.608ms] | 1.198ms [1.149ms–1.199ms] | +18.2% | -17.4% |
+| r | Turin vs Graviton4 | (indexing) | index time | — | — | insufficient reps | — |
+| r | Turin vs Graviton4 | `load-2000` | term service time | — | — | insufficient reps | — |
+| r | Turin vs Graviton4 | `load-500` | term service time | 1.434ms [1.429ms–1.499ms] | 1.214ms [1.160ms–1.357ms] | +15.4% | -20.2% |
+| m | Intel vs Graviton4 | (indexing) | index time | — | — | insufficient reps | — |
+| m | Intel vs Graviton4 | `load-2000` | term service time | — | — | insufficient reps | — |
+| m | Intel vs Graviton4 | `load-500` | term service time | 1.489ms [1.487ms–1.532ms] | 2.075ms [1.929ms–2.089ms] | -39.4% | -57.3% |
+| c | Intel vs Graviton4 | (indexing) | index time | — | — | insufficient reps | — |
+| c | Intel vs Graviton4 | `load-2000` | term service time | — | — | insufficient reps | — |
+| c | Intel vs Graviton4 | `load-500` | term service time | 1.464ms [1.418ms–1.608ms] | 2.051ms [1.958ms–2.076ms] | -40.1% | -58.0% |
+| r | Intel vs Graviton4 | (indexing) | index time | — | — | insufficient reps | — |
+| r | Intel vs Graviton4 | `load-2000` | term service time | — | — | insufficient reps | — |
+| r | Intel vs Graviton4 | `load-500` | term service time | 1.434ms [1.429ms–1.499ms] | 1.757ms [1.692ms–2.018ms] | -22.5% | -40.4% |
 
 *price-adjusted* = performance delta minus the on-demand price delta. Negative means the faster instance is not worth its premium at list price. The price delta is region-invariant within a family (see the price table), so one figure is valid for all regions.
 
 ### Cross-region agreement (term query)
 
-Each region is an independent repetition on independent hardware. Below, each region votes on the sign of the Turin-vs-Graviton4 difference. Unanimous agreement across regions is far stronger evidence than a pooled median alone, and a split vote means the effect is not robust no matter how the IQRs fall.
+Each region is an independent repetition on independent hardware. Below, each region votes on the sign of each pairwise difference. Unanimous agreement across regions is far stronger evidence than a pooled median alone, and a split vote means the effect is not robust no matter how the IQRs fall.
 
-| family | load level | regions favouring Turin | favouring Graviton4 | verdict |
-|---|---|--:|--:|---|
-| m | `load-2000` | 2 | 0 | **unanimous: Turin** (2/2) |
-| m | `load-500` | 4 | 0 | **unanimous: Turin** (4/4) |
-| c | `load-2000` | 2 | 0 | **unanimous: Turin** (2/2) |
-| c | `load-500` | 3 | 0 | **unanimous: Turin** (3/3) |
-| r | `load-2000` | 2 | 0 | **unanimous: Turin** (2/2) |
-| r | `load-500` | 5 | 0 | **unanimous: Turin** (5/5) |
+| family | comparison | load level | regions favouring challenger | favouring baseline | verdict |
+|---|---|---|--:|--:|---|
+| m | Turin vs Graviton4 | `load-2000` | 2 | 0 | **unanimous: Turin** (2/2) |
+| m | Turin vs Graviton4 | `load-500` | 4 | 0 | **unanimous: Turin** (4/4) |
+| c | Turin vs Graviton4 | `load-2000` | 2 | 0 | **unanimous: Turin** (2/2) |
+| c | Turin vs Graviton4 | `load-500` | 3 | 0 | **unanimous: Turin** (3/3) |
+| r | Turin vs Graviton4 | `load-2000` | 2 | 0 | **unanimous: Turin** (2/2) |
+| r | Turin vs Graviton4 | `load-500` | 5 | 0 | **unanimous: Turin** (5/5) |
+| m | Intel vs Graviton4 | `load-2000` | 0 | 2 | **unanimous: Graviton4** (2/2) |
+| m | Intel vs Graviton4 | `load-500` | 0 | 5 | **unanimous: Graviton4** (5/5) |
+| c | Intel vs Graviton4 | `load-2000` | 0 | 2 | **unanimous: Graviton4** (2/2) |
+| c | Intel vs Graviton4 | `load-500` | 0 | 5 | **unanimous: Graviton4** (5/5) |
+| r | Intel vs Graviton4 | `load-2000` | 0 | 2 | **unanimous: Graviton4** (2/2) |
+| r | Intel vs Graviton4 | `load-500` | 0 | 5 | **unanimous: Graviton4** (5/5) |
 
 A split vote overrides any percentage in the table above: if regions disagree on the direction, the effect is within regional noise regardless of what the pooled IQRs show.
 
@@ -226,4 +241,4 @@ All collected runs passed validity checks (error rate ≤ 0.1%, doc counts verif
 
 `doc count unverified (probe could not reach cluster)` means the in-pod probe failed, not that the data is wrong: the opensearch-benchmark image ships no `curl`, so every probe request returned empty. Doc counts for these runs were instead verified out-of-band directly against each cluster, and came back identical (11,396,503 documents, 3/3 shards successful) on Graviton, AMD and Intel alike. The probe is fixed for subsequent runs.
 
-*Generated 2026-09-22 19:53 UTC — [opensearch-benchmark-framework](https://github.com/AndreKurait/opensearch-benchmark-framework)*
+*Generated 2026-09-22 21:00 UTC — [opensearch-benchmark-framework](https://github.com/AndreKurait/opensearch-benchmark-framework)*

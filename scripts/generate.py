@@ -49,7 +49,15 @@ OUT = ROOT / "k8s" / "generated" / REGION
 # EBS and network allocations are BURSTABLE (312.5 MB/s baseline vs 1250 MB/s
 # burst), so credit depletion mid-run is a large, uncontrolled noise source.
 # At 8xlarge, baseline == maximum, so storage behaviour is steady-state.
-FAMILY_KEYS = ["m8g", "m8a", "m8i", "c8g", "c8a", "c8i", "r8g", "r8a", "r8i"]
+# Overridable so a Graviton5 wave (BENCH_FAMILIES="m9g,c9g,r9g") reuses this
+# generator unchanged. Must match whatever BENCH_FAMILIES fetch_specs.py ran with,
+# or the lookup into specs.json will miss.
+FAMILY_KEYS = [
+    f.strip() for f in os.environ.get(
+        "BENCH_FAMILIES",
+        "m8g,m8a,m8i,c8g,c8a,c8i,r8g,r8a,r8i",
+    ).split(",") if f.strip()
+]
 SIZE = os.environ.get("BENCH_SIZE", "8xlarge")
 
 # Load generator: ONE instance type for every permutation, so the measuring

@@ -103,7 +103,10 @@ while true; do
     # Below this, the surviving matrix is too thin to be worth the spend: the
     # whole point is comparing Graviton against AMD against Intel, and a handful
     # of arms cannot support that.
-    MIN_PERMS="${MIN_PERMS:-6}"
+    # Scales with the matrix: two thirds of it must survive. A fixed 6 was right
+    # for the nine-type 8th-gen matrix but would abandon every region of a
+    # three-type Graviton5 wave before it could produce anything.
+    MIN_PERMS="${MIN_PERMS:-$(( (COUNT * 2 + 2) / 3 ))}"
     if (( NAVAIL < MIN_PERMS )); then
       echo "  !! [$REGION] only $NAVAIL/$COUNT permutations came up (<$MIN_PERMS); abandoning region."
       exit 1

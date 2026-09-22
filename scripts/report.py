@@ -36,7 +36,25 @@ RESULTS_DIR = ROOT / "results"
 MIN_REPS = 3
 MAX_ERROR_RATE = 0.1  # percent
 
-CPU_ORDER = ["Graviton4", "AMD Turin", "Intel Granite Rapids"]
+CPU_ORDER = ["Graviton4", "Graviton5", "AMD Turin", "Intel Granite Rapids"]
+
+# Every pairwise comparison the report makes, as (baseline, challenger). The
+# head-to-head and cross-region-vote sections were previously hardwired to
+# Turin-vs-Graviton4; a pair whose CPUs are both absent from the data is skipped,
+# so this list is safe to extend. Graviton5 is compared against Graviton4 (the
+# generational question) and against Turin (the vendor question the original
+# claim was about).
+CPU_PAIRS = [
+    ("Graviton4", "AMD Turin"),
+    ("Graviton4", "Graviton5"),
+    ("Graviton5", "AMD Turin"),
+    ("Graviton4", "Intel Granite Rapids"),
+]
+
+
+def short(cpu):
+    """Column label: 'AMD Turin' -> 'Turin', 'Intel Granite Rapids' -> 'Intel'."""
+    return {"AMD Turin": "Turin", "Intel Granite Rapids": "Intel"}.get(cpu, cpu)
 
 SEARCH_TASKS = ["term", "phrase", "match-all", "country_agg_uncached", "scroll"]
 
@@ -496,14 +514,16 @@ def main():
           "medians do not overlap. Everything else is *within noise* and must "
           "not be quoted as a result.")
         w("")
-        w("| family | load level | metric | Graviton4 | AMD Turin | Turin vs Graviton | "
-          "price-adjusted |")
-        w("|---|---|---|--:|--:|--:|--:|")
-        for fam in ["m", "c", "r"]:
+        w("| family | comparison | load level | metric | baseline | challenger | "
+          "challenger vs baseline | price-adjusted |")
+        w("|---|---|---|---|--:|--:|--:|--:|")
+        for base_cpu, chal_cpu in CPU_PAIRS:
+          pair = f"{short(chal_cpu)} vs {short(base_cpu)}"
+          for fam in ["m", "c", "r"]:
             gk = next((pk for pk in perms
-                       if det[pk]["family"] == fam and det[pk]["cpu"] == "Graviton4"), None)
+                       if det[pk]["family"] == fam and det[pk]["cpu"] == base_cpu), None)
             ak = next((pk for pk in perms
-                       if det[pk]["family"] == fam and det[pk]["cpu"] == "AMD Turin"), None)
+                       if det[pk]["family"] == fam and det[pk]["cpu"] == chal_cpu), None)
             if not gk or not ak:
                 continue
             pr = (det[ak]["usd_per_hour"] - det[gk]["usd_per_hour"]) / det[gk]["usd_per_hour"] * 100
@@ -514,8 +534,8 @@ def main():
             if ga and aa and separated(ga, aa):
                 perf = (ga["median"] - aa["median"]) / ga["median"] * 100
                 adj = f"{perf - pr:+.1f}%"
-            w(f"| {fam} | (indexing) | index time | {fmt_num(ga,2)} | {fmt_num(aa,2)} | "
-              f"{verdict} | {adj} |")
+            w(f"| {fam} | {pair} | (indexing) | index time | {fmt_num(ga,2)} | "
+              f"{fmt_num(aa,2)} | {verdict} | {adj} |")
 
             for lk in load_keys:
                 kind = config["load_levels"][lk]["kind"]
@@ -527,8 +547,8 @@ def main():
                     if gq and aq and separated(gq, aq):
                         perf = (aq["median"] - gq["median"]) / gq["median"] * 100
                         adj = f"{perf - pr:+.1f}%"
-                    w(f"| {fam} | `{lk}` | term throughput | {fmt_num(gq,0)} | "
-                      f"{fmt_num(aq,0)} | {verdict} | {adj} |")
+                    w(f"| {fam} | {pair} | `{lk}` | term throughput | "
+                      f"{fmt_num(gq,0)} | {fmt_num(aq,0)} | {verdict} | {adj} |")
                 else:
                     gs = agg([service_time(c["m"], "term") for c in runs[lk][gk]])
                     as_ = agg([service_time(c["m"], "term") for c in runs[lk][ak]])
@@ -537,8 +557,8 @@ def main():
                     if gs and as_ and separated(gs, as_):
                         perf = (gs["median"] - as_["median"]) / gs["median"] * 100
                         adj = f"{perf - pr:+.1f}%"
-                    w(f"| {fam} | `{lk}` | term service time | {fmt_ms(gs)} | "
-                      f"{fmt_ms(as_)} | {verdict} | {adj} |")
+                    w(f"| {fam} | {pair} | `{lk}` | term service time | "
+                      f"{fmt_ms(gs)} | {fmt_ms(as_)} | {verdict} | {adj} |")
         w("")
         w("*price-adjusted* = performance delta minus the on-demand price delta. "
           "Negative means the faster instance is not worth its premium at list "
@@ -552,18 +572,21 @@ def main():
         w("### Cross-region agreement (term query)")
         w("")
         w("Each region is an independent repetition on independent hardware. "
-          "Below, each region votes on the sign of the Turin-vs-Graviton4 "
+          "Below, each region votes on the sign of each pairwise "
           "difference. Unanimous agreement across regions is far stronger "
           "evidence than a pooled median alone, and a split vote means the "
           "effect is not robust no matter how the IQRs fall.")
         w("")
-        w("| family | load level | regions favouring Turin | favouring Graviton4 | verdict |")
-        w("|---|---|--:|--:|---|")
-        for fam in ["m", "c", "r"]:
+        w("| family | comparison | load level | regions favouring challenger | "
+          "favouring baseline | verdict |")
+        w("|---|---|---|--:|--:|---|")
+        for base_cpu, chal_cpu in CPU_PAIRS:
+          pair = f"{short(chal_cpu)} vs {short(base_cpu)}"
+          for fam in ["m", "c", "r"]:
             gk = next((pk for pk in perms if det[pk]["family"] == fam
-                       and det[pk]["cpu"] == "Graviton4"), None)
+                       and det[pk]["cpu"] == base_cpu), None)
             ak = next((pk for pk in perms if det[pk]["family"] == fam
-                       and det[pk]["cpu"] == "AMD Turin"), None)
+                       and det[pk]["cpu"] == chal_cpu), None)
             if not gk or not ak:
                 continue
             for lk in load_keys:
@@ -593,12 +616,12 @@ def main():
                     grav += 0 if better else 1
                 n = len(shared)
                 if turin == n:
-                    verdict = f"**unanimous: Turin** ({n}/{n})"
+                    verdict = f"**unanimous: {short(chal_cpu)}** ({n}/{n})"
                 elif grav == n:
-                    verdict = f"**unanimous: Graviton4** ({n}/{n})"
+                    verdict = f"**unanimous: {short(base_cpu)}** ({n}/{n})"
                 else:
                     verdict = f"split {turin}–{grav} — not robust"
-                w(f"| {fam} | `{lk}` | {turin} | {grav} | {verdict} |")
+                w(f"| {fam} | {pair} | `{lk}` | {turin} | {grav} | {verdict} |")
         w("")
         w("A split vote overrides any percentage in the table above: if regions "
           "disagree on the direction, the effect is within regional noise "
