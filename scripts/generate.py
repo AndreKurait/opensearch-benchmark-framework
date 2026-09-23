@@ -71,12 +71,63 @@ LOADGEN_TYPE = os.environ.get("BENCH_LOADGEN_TYPE", "c8i.8xlarge")
 # Reporting rule enforced in report.py:
 #   - numeric levels  -> compare latency / service time (throughput is pinned)
 #   - "saturate"      -> compare throughput (latency is meaningless here)
+#
+# The saturate level restricts the task list (see SATURATE_TASKS). Running the
+# full 26-task append-no-conflicts procedure unthrottled does not finish: with
+# the rate limit removed the cluster is pegged, and the first observed attempt
+# was still only 31% through task 2 of 26 (node-stats) after 82 minutes, so
+# every region hit the 3h per-cell ceiling and collected zero permutations.
+# The fixed-rate levels complete in 75-105 min precisely BECAUSE the rate cap
+# keeps the cluster below saturation; that headroom is what the stats and
+# heavy-aggregation tasks need in order to make progress.
 LOAD_LEVELS = {
     "load-500": {"target_throughput": 500, "kind": "fixed-rate"},
     "load-2000": {"target_throughput": 2000, "kind": "fixed-rate"},
     "load-8000": {"target_throughput": 8000, "kind": "fixed-rate"},
     "saturate": {"target_throughput": 0, "kind": "saturate"},
 }
+
+# Tasks DROPPED at the saturate level. Two independent reasons to restrict:
+#   1. Feasibility -- the full procedure cannot complete unthrottled (above).
+#   2. Relevance -- saturate exists to measure a THROUGHPUT ceiling, and only
+#      tasks that actually saturate can express one. index-stats/node-stats are
+#      admin APIs, not search work; the sort/script/painless tasks were never
+#      part of any comparison the report makes.
+#
+# This is an EXCLUDE list rather than an include list on purpose. OSB's
+# --include-tasks filters the whole schedule, including delete-index /
+# create-index / index-append / refresh-after-index / force-merge, so an include
+# list of search tasks would benchmark searches against an empty index. Naming
+# the tasks to drop leaves the indexing pipeline intact.
+#
+# What survives: match-all, term, phrase (the cheap queries whose throughput was
+# pinned to the offered rate at every fixed-rate level, so saturate is the ONLY
+# level where they can discriminate CPUs at all) plus country_agg_uncached and
+# scroll, which already saturate at fixed rates and therefore serve as the
+# cross-check that the unthrottled numbers agree with the throttled ones.
+SATURATE_EXCLUDE_TASKS = [
+    "index-stats",
+    "node-stats",
+    "country_agg_cached",
+    "expression",
+    "painless_static",
+    "painless_dynamic",
+    "decay_geo_gauss_function_score",
+    "decay_geo_gauss_script_score",
+    "field_value_function_score",
+    "field_value_script_score",
+    "large_terms",
+    "large_filtered_terms",
+    "large_prohibited_terms",
+    "desc_sort_population",
+    "asc_sort_population",
+    "asc_sort_with_after_population",
+    "desc_sort_geonameid",
+    "desc_sort_with_after_geonameid",
+    "asc_sort_geonameid",
+    "asc_sort_with_after_geonameid",
+    "numeric-term-cardinality-agg-high",
+]
 
 # Single storage tier, provisioned to be ACTUALLY ACHIEVABLE at 8xlarge
 # (1250 MB/s EBS baseline). The old default/fast EBS axis was dead weight: the
@@ -525,6 +576,12 @@ def gen_osb_jobs(perms, workload_name, load_key, rep):
             f" --user-tag='perm:{p['name']},cpu:{p['cpu']},load:{load_key},rep:{rep}'"
             " --on-error=continue"
         )
+
+        # Trim the unthrottled schedule to the tasks that can actually express a
+        # throughput ceiling. Without this the cell cannot finish inside the 3h
+        # per-cell deadline -- see SATURATE_EXCLUDE_TASKS.
+        if level["kind"] == "saturate":
+            osb_cmd += f" --exclude-tasks='{','.join(SATURATE_EXCLUDE_TASKS)}'"
 
         # Note: --on-error=continue is retained so a partial failure still
         # yields data, but the error rate is extracted below and report.py
