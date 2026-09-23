@@ -87,8 +87,15 @@ log "STEP 2/6: Uploading the repo to S3"
 # Ship a tarball rather than cloning from GitHub: the host then needs no git
 # credentials, and we benchmark exactly the working tree being reviewed.
 TAR="/tmp/${STACK}-src.tgz"
+# results/ is excluded because shipping already-collected cells to the host makes
+# the run's own S3 prefix indistinguishable from previous runs: the sync loop
+# copies them up, so ".complete markers under this run id" stops meaning "cells
+# this run produced". ._* are macOS AppleDouble files, which tar happily includes
+# and which then appear in S3 as phantom siblings of every real object.
+# The bootstrap mkdir -p's results/, so excluding it here is safe.
 tar --exclude='.git' --exclude='.runs' --exclude='logs' --exclude='.terraform*' \
-    --exclude='k8s/generated' -czf "$TAR" -C "$ROOT" .
+    --exclude='k8s/generated' --exclude='results' --exclude='._*' \
+    -czf "$TAR" -C "$ROOT" .
 aws s3 cp "$TAR" "s3://${BUCKET}/${RUN_ID}/src.tgz" >/dev/null
 echo "uploaded s3://${BUCKET}/${RUN_ID}/src.tgz ($(du -h "$TAR" | cut -f1))"
 
