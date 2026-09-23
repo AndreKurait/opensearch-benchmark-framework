@@ -1,6 +1,6 @@
 # OpenSearch 3.5 — 8th-Gen EC2 CPU Architecture Benchmark
 
-**Generated:** 2026-09-22 23:35 UTC  
+**Generated:** 2026-09-23 07:01 UTC  
 **Instance size:** `8xlarge` | **Load generator:** `c8i.8xlarge` (fixed everywhere)  
 **Repetitions:** 7, one per region | **Tool:** OpenSearch Benchmark | **OpenSearch:** 3.5.0 | **EKS Auto Mode + Karpenter**
 
@@ -152,21 +152,39 @@ Achieved vs offered throughput (a shortfall means the cell could not sustain the
 | `r8a` | AMD Turin | 7,961 | 7,928 | 7,904 | **261** ⚠️ | **1,816** ⚠️ |
 | `r8i` | Intel Granite Rapids | 7,974 | 7,927 | 7,937 | **132** ⚠️ | **2,293** ⚠️ |
 
+### Search — load level `saturate` (unthrottled / saturating)
+
+Unthrottled, so **throughput is comparable** here. Latency is queue-dominated at saturation and is deliberately not reported — use the fixed-rate levels above for latency.
+
+> **Only the `country_agg_uncached` column ranks CPUs.** The `match-all`, `term` and `phrase` columns are bounded by the load generator, not by the cluster: every instance type piles onto a ~17,400–17,650 ops/s plateau, and the dips below it move between regions for the same instance type (`r8a` match-all: 13,981 / 17,328 / 17,091 / 13,352 / 13,762 across five regions). They are listed for completeness and must not be quoted as ceilings. `country_agg_uncached` is costly enough per request that the generator stays idle, its within-vendor spread is 2–5%, and it reproduces the achieved throughput of the rate-limited levels — which is why every saturate comparison below uses it.
+
+| perm | CPU | cores | term | phrase | match-all | country_agg_uncached | scroll | $/1k ops, term (ap-northeast-1) |
+|---|---|--:|--:|--:|--:|--:|--:|--:|
+| `m8g` | Graviton4 | 32 | 17,212 [16,565–17,305] | 17,962 [17,350–18,487] | 17,550 [17,416–17,564] | 162 [159–165] | 2,338 [2,324–2,342] | $0.00009 |
+| `m8a` | AMD Turin | 32 | 16,634 [16,111–17,168] | 17,189 [16,836–17,470] | 17,285 [17,188–17,352] | 248 [246–250] | 2,289 [2,254–2,322] | $0.00013 |
+| `m8i` | Intel Granite Rapids | 16 | 16,084 [14,983–16,588] | 16,809 [16,775–16,923] | 16,486 [16,446–17,422] | 139 [133–140] | 2,332 [2,321–2,355] | $0.00011 |
+| `c8g` | Graviton4 | 32 | 13,464 [13,346–14,153] | 14,331 [14,285–15,162] | 17,159 [13,219–17,542] | 165 [162–166] | 1,707 [1,704–1,722] | $0.00010 |
+| `c8a` | AMD Turin | 32 | 13,917 [13,273–14,526] | 13,778 [9,144–13,933] | 17,524 [15,729–17,568] | 253 [245–253] | 1,850 [1,830–1,853] | $0.00013 |
+| `c8i` | Intel Granite Rapids | 16 | 13,652 [13,215–13,688] | 15,766 [13,587–16,317] | 6,112 [5,385–6,365] | 139 [138–140] | 1,707 [1,698–1,710] | $0.00012 |
+| `r8g` | Graviton4 | 32 | 14,116 [13,983–14,541] | 14,607 [14,491–14,756] | 14,030 [13,653–15,400] | 161 [161–162] | 1,711 [1,705–1,732] | $0.00013 |
+| `r8a` | AMD Turin | 32 | 14,092 [13,747–14,097] | 14,174 [13,869–16,237] | 13,981 [13,762–17,091] | 264 [262–266] | 1,802 [1,797–2,052] | $0.00018 |
+| `r8i` | Intel Granite Rapids | 16 | 16,608 [14,572–16,930] | 16,383 [16,324–16,450] | 17,458 [16,896–17,472] | 137 [134–140] | 1,998 [1,991–2,359] | $0.00013 |
+
 ### Scaling across load levels (term query)
 
 This is the axis the previous revision could not measure, because client count was tied to instance family (c=2, m=4, r=8) and therefore confounded with heap size and RAM. Here client count is fixed at 64 everywhere and only the offered rate varies.
 
-| perm | CPU | cores | `load-2000` | `load-500` | `load-8000` |
-|---|---|--:|--:|--:|--:|
-| `m8g` | Graviton4 | 32 | 1,999 [1,999–2,000] | 500 [500–500] | 7,911 [7,906–7,911] |
-| `m8a` | AMD Turin | 32 | 1,999 [1,999–1,999] | 500 [500–500] | 7,918 [7,880–7,950] |
-| `m8i` | Intel Granite Rapids | 16 | 2,000 [2,000–2,000] | 500 [500–500] | 7,923 [7,917–7,924] |
-| `c8g` | Graviton4 | 32 | 1,999 [1,999–1,999] | 500 [500–500] | 7,947 [7,919–7,973] |
-| `c8a` | AMD Turin | 32 | 2,000 [1,999–2,000] | 500 [500–500] | 7,949 [7,904–7,950] |
-| `c8i` | Intel Granite Rapids | 16 | 1,999 [1,999–1,999] | 500 [500–500] | 7,917 [7,905–7,921] |
-| `r8g` | Graviton4 | 32 | 1,998 [1,997–1,999] | 500 [500–500] | 7,961 [7,923–7,968] |
-| `r8a` | AMD Turin | 32 | 1,999 [1,999–2,000] | 500 [500–500] | 7,961 [7,926–7,982] |
-| `r8i` | Intel Granite Rapids | 16 | 1,999 [1,999–2,000] | 500 [500–500] | 7,974 [7,964–7,976] |
+| perm | CPU | cores | `load-2000` | `load-500` | `load-8000` | `saturate` |
+|---|---|--:|--:|--:|--:|--:|
+| `m8g` | Graviton4 | 32 | 1,999 [1,999–2,000] | 500 [500–500] | 7,911 [7,906–7,911] | 17,212 [16,565–17,305] |
+| `m8a` | AMD Turin | 32 | 1,999 [1,999–1,999] | 500 [500–500] | 7,918 [7,880–7,950] | 16,634 [16,111–17,168] |
+| `m8i` | Intel Granite Rapids | 16 | 2,000 [2,000–2,000] | 500 [500–500] | 7,923 [7,917–7,924] | 16,084 [14,983–16,588] |
+| `c8g` | Graviton4 | 32 | 1,999 [1,999–1,999] | 500 [500–500] | 7,947 [7,919–7,973] | 13,464 [13,346–14,153] |
+| `c8a` | AMD Turin | 32 | 2,000 [1,999–2,000] | 500 [500–500] | 7,949 [7,904–7,950] | 13,917 [13,273–14,526] |
+| `c8i` | Intel Granite Rapids | 16 | 1,999 [1,999–1,999] | 500 [500–500] | 7,917 [7,905–7,921] | 13,652 [13,215–13,688] |
+| `r8g` | Graviton4 | 32 | 1,998 [1,997–1,999] | 500 [500–500] | 7,961 [7,923–7,968] | 14,116 [13,983–14,541] |
+| `r8a` | AMD Turin | 32 | 1,999 [1,999–2,000] | 500 [500–500] | 7,961 [7,926–7,982] | 14,092 [13,747–14,097] |
+| `r8i` | Intel Granite Rapids | 16 | 1,999 [1,999–2,000] | 500 [500–500] | 7,974 [7,964–7,976] | 16,608 [14,572–16,930] |
 
 ### Head-to-head, noise-gated
 
@@ -178,26 +196,32 @@ Percentages appear only where the interquartile ranges of the two medians do not
 | m | Turin vs Graviton4 | `load-2000` | term service time | 1.369ms [1.315ms–1.428ms] | 1.049ms [1.033ms–1.158ms] | +23.3% | -12.3% |
 | m | Turin vs Graviton4 | `load-500` | term service time | 1.489ms [1.487ms–1.532ms] | 1.334ms [1.307ms–1.432ms] | +10.4% | -25.2% |
 | m | Turin vs Graviton4 | `load-8000` | term service time | 1.487ms [1.446ms–1.496ms] | 1.024ms [1.002ms–1.110ms] | +31.1% | -4.5% |
+| m | Turin vs Graviton4 | `saturate` | country_agg_uncached throughput | 162 [159–165] | 248 [246–250] | +53.1% | +17.5% |
 | c | Turin vs Graviton4 | (indexing) | index time | 8.26 [8.17–8.38] | 7.96 [7.70–8.00] | +3.6% | -32.0% |
 | c | Turin vs Graviton4 | `load-2000` | term service time | 1.387ms [1.374ms–1.480ms] | 1.054ms [1.052ms–1.060ms] | +24.0% | -11.6% |
 | c | Turin vs Graviton4 | `load-500` | term service time | 1.464ms [1.418ms–1.608ms] | 1.198ms [1.149ms–1.199ms] | +18.2% | -17.4% |
 | c | Turin vs Graviton4 | `load-8000` | term service time | 1.474ms [1.408ms–1.518ms] | 1.017ms [0.990ms–1.030ms] | +31.0% | -4.5% |
+| c | Turin vs Graviton4 | `saturate` | country_agg_uncached throughput | 165 [162–166] | 253 [245–253] | +53.1% | +17.5% |
 | r | Turin vs Graviton4 | (indexing) | index time | 8.27 [8.18–8.40] | 7.36 [7.25–7.62] | +11.0% | -24.6% |
 | r | Turin vs Graviton4 | `load-2000` | term service time | 1.387ms [1.374ms–1.404ms] | 1.024ms [0.996ms–1.043ms] | +26.1% | -9.5% |
 | r | Turin vs Graviton4 | `load-500` | term service time | 1.434ms [1.429ms–1.499ms] | 1.214ms [1.160ms–1.357ms] | +15.4% | -20.2% |
 | r | Turin vs Graviton4 | `load-8000` | term service time | 1.456ms [1.414ms–1.495ms] | 0.999ms [0.987ms–1.101ms] | +31.4% | -4.2% |
+| r | Turin vs Graviton4 | `saturate` | country_agg_uncached throughput | 161 [161–162] | 264 [262–266] | +63.8% | +28.2% |
 | m | Intel vs Graviton4 | (indexing) | index time | 8.33 [8.30–8.34] | 8.95 [8.85–8.97] | -7.4% | -25.3% |
 | m | Intel vs Graviton4 | `load-2000` | term service time | 1.369ms [1.315ms–1.428ms] | 1.630ms [1.587ms–2.202ms] | -19.1% | -37.0% |
 | m | Intel vs Graviton4 | `load-500` | term service time | 1.489ms [1.487ms–1.532ms] | 2.075ms [1.929ms–2.089ms] | -39.4% | -57.3% |
 | m | Intel vs Graviton4 | `load-8000` | term service time | 1.487ms [1.446ms–1.496ms] | 1.438ms [1.432ms–1.493ms] | within noise | — |
+| m | Intel vs Graviton4 | `saturate` | country_agg_uncached throughput | 162 [159–165] | 139 [133–140] | -14.4% | -32.3% |
 | c | Intel vs Graviton4 | (indexing) | index time | 8.26 [8.17–8.38] | 8.96 [8.76–9.25] | -8.5% | -26.4% |
 | c | Intel vs Graviton4 | `load-2000` | term service time | 1.387ms [1.374ms–1.480ms] | 1.662ms [1.560ms–1.837ms] | -19.9% | -37.8% |
 | c | Intel vs Graviton4 | `load-500` | term service time | 1.464ms [1.418ms–1.608ms] | 2.051ms [1.958ms–2.076ms] | -40.1% | -58.0% |
 | c | Intel vs Graviton4 | `load-8000` | term service time | 1.474ms [1.408ms–1.518ms] | 1.478ms [1.441ms–1.694ms] | within noise | — |
+| c | Intel vs Graviton4 | `saturate` | country_agg_uncached throughput | 165 [162–166] | 139 [138–140] | -16.1% | -34.0% |
 | r | Intel vs Graviton4 | (indexing) | index time | 8.27 [8.18–8.40] | 8.72 [8.69–8.89] | -5.5% | -23.4% |
 | r | Intel vs Graviton4 | `load-2000` | term service time | 1.387ms [1.374ms–1.404ms] | 1.868ms [1.766ms–2.006ms] | -34.7% | -52.6% |
 | r | Intel vs Graviton4 | `load-500` | term service time | 1.434ms [1.429ms–1.499ms] | 1.757ms [1.692ms–2.018ms] | -22.5% | -40.4% |
 | r | Intel vs Graviton4 | `load-8000` | term service time | 1.456ms [1.414ms–1.495ms] | 1.554ms [1.523ms–1.606ms] | -6.7% | -24.7% |
+| r | Intel vs Graviton4 | `saturate` | country_agg_uncached throughput | 161 [161–162] | 137 [134–140] | -15.0% | -32.9% |
 
 *price-adjusted* = performance delta minus the on-demand price delta. Negative means the faster instance is not worth its premium at list price. The price delta is region-invariant within a family (see the price table), so one figure is valid for all regions.
 
@@ -210,21 +234,27 @@ Each region is an independent repetition on independent hardware. Below, each re
 | m | Turin vs Graviton4 | `load-2000` | 4 | 0 | **unanimous: Turin** (4/4) |
 | m | Turin vs Graviton4 | `load-500` | 4 | 0 | **unanimous: Turin** (4/4) |
 | m | Turin vs Graviton4 | `load-8000` | 4 | 0 | **unanimous: Turin** (4/4) |
+| m | Turin vs Graviton4 | `saturate` | 4 | 0 | **unanimous: Turin** (4/4) |
 | c | Turin vs Graviton4 | `load-2000` | 3 | 0 | **unanimous: Turin** (3/3) |
 | c | Turin vs Graviton4 | `load-500` | 3 | 0 | **unanimous: Turin** (3/3) |
 | c | Turin vs Graviton4 | `load-8000` | 3 | 0 | **unanimous: Turin** (3/3) |
+| c | Turin vs Graviton4 | `saturate` | 3 | 0 | **unanimous: Turin** (3/3) |
 | r | Turin vs Graviton4 | `load-2000` | 5 | 0 | **unanimous: Turin** (5/5) |
 | r | Turin vs Graviton4 | `load-500` | 5 | 0 | **unanimous: Turin** (5/5) |
 | r | Turin vs Graviton4 | `load-8000` | 5 | 0 | **unanimous: Turin** (5/5) |
+| r | Turin vs Graviton4 | `saturate` | 5 | 0 | **unanimous: Turin** (5/5) |
 | m | Intel vs Graviton4 | `load-2000` | 0 | 5 | **unanimous: Graviton4** (5/5) |
 | m | Intel vs Graviton4 | `load-500` | 0 | 5 | **unanimous: Graviton4** (5/5) |
 | m | Intel vs Graviton4 | `load-8000` | 2 | 3 | split 2–3 — not robust |
+| m | Intel vs Graviton4 | `saturate` | 0 | 5 | **unanimous: Graviton4** (5/5) |
 | c | Intel vs Graviton4 | `load-2000` | 0 | 5 | **unanimous: Graviton4** (5/5) |
 | c | Intel vs Graviton4 | `load-500` | 0 | 5 | **unanimous: Graviton4** (5/5) |
 | c | Intel vs Graviton4 | `load-8000` | 2 | 3 | split 2–3 — not robust |
+| c | Intel vs Graviton4 | `saturate` | 0 | 5 | **unanimous: Graviton4** (5/5) |
 | r | Intel vs Graviton4 | `load-2000` | 0 | 5 | **unanimous: Graviton4** (5/5) |
 | r | Intel vs Graviton4 | `load-500` | 0 | 5 | **unanimous: Graviton4** (5/5) |
 | r | Intel vs Graviton4 | `load-8000` | 0 | 5 | **unanimous: Graviton4** (5/5) |
+| r | Intel vs Graviton4 | `saturate` | 0 | 5 | **unanimous: Graviton4** (5/5) |
 
 A split vote overrides any percentage in the table above: if regions disagree on the direction, the effect is within regional noise regardless of what the pooled IQRs show.
 
@@ -232,7 +262,7 @@ A split vote overrides any percentage in the table above: if regions disagree on
 
 All collected runs passed validity checks (error rate ≤ 0.1%, doc counts verified, no ignored workload params, OSB exit 0).
 
-126 run(s) included but with a weakened audit trail:
+168 run(s) included but with a weakened audit trail:
 
 | workload | load | rep | perm | caveat |
 |---|---|---|---|---|
@@ -362,7 +392,49 @@ All collected runs passed validity checks (error rate ≤ 0.1%, doc counts verif
 | geonames | load-8000 | eu-south-2 | r8i | doc count unverified (probe could not reach cluster) |
 | geonames | load-8000 | eu-west-1 | r8i | doc count unverified (probe could not reach cluster) |
 | geonames | load-8000 | us-west-2 | r8i | doc count unverified (probe could not reach cluster) |
+| geonames | saturate | ap-northeast-1 | m8g | doc count within tolerance but not exact: DOCCOUNT_DELTA counted=11396503 expected=11396505 |
+| geonames | saturate | eu-central-1 | m8g | doc count within tolerance but not exact: DOCCOUNT_DELTA counted=11396503 expected=11396505 |
+| geonames | saturate | eu-west-1 | m8g | doc count within tolerance but not exact: DOCCOUNT_DELTA counted=11396503 expected=11396505 |
+| geonames | saturate | us-east-2 | m8g | doc count within tolerance but not exact: DOCCOUNT_DELTA counted=11396503 expected=11396505 |
+| geonames | saturate | us-west-2 | m8g | doc count within tolerance but not exact: DOCCOUNT_DELTA counted=11396503 expected=11396505 |
+| geonames | saturate | ap-northeast-1 | m8a | doc count within tolerance but not exact: DOCCOUNT_DELTA counted=11396503 expected=11396505 |
+| geonames | saturate | eu-central-1 | m8a | doc count within tolerance but not exact: DOCCOUNT_DELTA counted=11396503 expected=11396505 |
+| geonames | saturate | eu-west-1 | m8a | doc count within tolerance but not exact: DOCCOUNT_DELTA counted=11396503 expected=11396505 |
+| geonames | saturate | us-west-2 | m8a | doc count within tolerance but not exact: DOCCOUNT_DELTA counted=11396503 expected=11396505 |
+| geonames | saturate | ap-northeast-1 | m8i | doc count within tolerance but not exact: DOCCOUNT_DELTA counted=11396503 expected=11396505 |
+| geonames | saturate | eu-central-1 | m8i | doc count within tolerance but not exact: DOCCOUNT_DELTA counted=11396503 expected=11396505 |
+| geonames | saturate | eu-west-1 | m8i | doc count within tolerance but not exact: DOCCOUNT_DELTA counted=11396503 expected=11396505 |
+| geonames | saturate | us-east-2 | m8i | doc count within tolerance but not exact: DOCCOUNT_DELTA counted=11396503 expected=11396505 |
+| geonames | saturate | us-west-2 | m8i | doc count within tolerance but not exact: DOCCOUNT_DELTA counted=11396503 expected=11396505 |
+| geonames | saturate | ap-northeast-1 | c8g | doc count within tolerance but not exact: DOCCOUNT_DELTA counted=11396503 expected=11396505 |
+| geonames | saturate | eu-central-1 | c8g | doc count within tolerance but not exact: DOCCOUNT_DELTA counted=11396503 expected=11396505 |
+| geonames | saturate | eu-west-1 | c8g | doc count within tolerance but not exact: DOCCOUNT_DELTA counted=11396503 expected=11396505 |
+| geonames | saturate | us-east-2 | c8g | doc count within tolerance but not exact: DOCCOUNT_DELTA counted=11396503 expected=11396505 |
+| geonames | saturate | us-west-2 | c8g | doc count within tolerance but not exact: DOCCOUNT_DELTA counted=11396503 expected=11396505 |
+| geonames | saturate | eu-central-1 | c8a | doc count within tolerance but not exact: DOCCOUNT_DELTA counted=11396503 expected=11396505 |
+| geonames | saturate | eu-west-1 | c8a | doc count within tolerance but not exact: DOCCOUNT_DELTA counted=11396503 expected=11396505 |
+| geonames | saturate | us-west-2 | c8a | doc count within tolerance but not exact: DOCCOUNT_DELTA counted=11396503 expected=11396505 |
+| geonames | saturate | ap-northeast-1 | c8i | doc count within tolerance but not exact: DOCCOUNT_DELTA counted=11396503 expected=11396505 |
+| geonames | saturate | eu-central-1 | c8i | doc count within tolerance but not exact: DOCCOUNT_DELTA counted=11396503 expected=11396505 |
+| geonames | saturate | eu-west-1 | c8i | doc count within tolerance but not exact: DOCCOUNT_DELTA counted=11396503 expected=11396505 |
+| geonames | saturate | us-east-2 | c8i | doc count within tolerance but not exact: DOCCOUNT_DELTA counted=11396503 expected=11396505 |
+| geonames | saturate | us-west-2 | c8i | doc count within tolerance but not exact: DOCCOUNT_DELTA counted=11396503 expected=11396505 |
+| geonames | saturate | ap-northeast-1 | r8g | doc count within tolerance but not exact: DOCCOUNT_DELTA counted=11396503 expected=11396505 |
+| geonames | saturate | eu-central-1 | r8g | doc count within tolerance but not exact: DOCCOUNT_DELTA counted=11396503 expected=11396505 |
+| geonames | saturate | eu-west-1 | r8g | doc count within tolerance but not exact: DOCCOUNT_DELTA counted=11396503 expected=11396505 |
+| geonames | saturate | us-east-2 | r8g | doc count within tolerance but not exact: DOCCOUNT_DELTA counted=11396503 expected=11396505 |
+| geonames | saturate | us-west-2 | r8g | doc count within tolerance but not exact: DOCCOUNT_DELTA counted=11396503 expected=11396505 |
+| geonames | saturate | ap-northeast-1 | r8a | doc count within tolerance but not exact: DOCCOUNT_DELTA counted=11396503 expected=11396505 |
+| geonames | saturate | eu-central-1 | r8a | doc count within tolerance but not exact: DOCCOUNT_DELTA counted=11396503 expected=11396505 |
+| geonames | saturate | eu-west-1 | r8a | doc count within tolerance but not exact: DOCCOUNT_DELTA counted=11396503 expected=11396505 |
+| geonames | saturate | us-east-2 | r8a | doc count within tolerance but not exact: DOCCOUNT_DELTA counted=11396503 expected=11396505 |
+| geonames | saturate | us-west-2 | r8a | doc count within tolerance but not exact: DOCCOUNT_DELTA counted=11396503 expected=11396505 |
+| geonames | saturate | ap-northeast-1 | r8i | doc count within tolerance but not exact: DOCCOUNT_DELTA counted=11396503 expected=11396505 |
+| geonames | saturate | eu-central-1 | r8i | doc count within tolerance but not exact: DOCCOUNT_DELTA counted=11396503 expected=11396505 |
+| geonames | saturate | eu-west-1 | r8i | doc count within tolerance but not exact: DOCCOUNT_DELTA counted=11396503 expected=11396505 |
+| geonames | saturate | us-east-2 | r8i | doc count within tolerance but not exact: DOCCOUNT_DELTA counted=11396503 expected=11396505 |
+| geonames | saturate | us-west-2 | r8i | doc count within tolerance but not exact: DOCCOUNT_DELTA counted=11396503 expected=11396505 |
 
 `doc count unverified (probe could not reach cluster)` means the in-pod probe failed, not that the data is wrong: the opensearch-benchmark image ships no `curl`, so every probe request returned empty. Doc counts for these runs were instead verified out-of-band directly against each cluster, and came back identical (11,396,503 documents, 3/3 shards successful) on Graviton, AMD and Intel alike. The probe is fixed for subsequent runs.
 
-*Generated 2026-09-22 23:35 UTC — [opensearch-benchmark-framework](https://github.com/AndreKurait/opensearch-benchmark-framework)*
+*Generated 2026-09-23 07:01 UTC — [opensearch-benchmark-framework](https://github.com/AndreKurait/opensearch-benchmark-framework)*

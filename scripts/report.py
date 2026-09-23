@@ -33,6 +33,25 @@ RESULTS_DIR = ROOT / "results"
 # performance numbers pool across regions. PRICES ARE NOT POOLED: they differ by
 # up to 29% between regions, so every price-adjusted figure is computed inside a
 # single region and only then aggregated.
+
+# The task used for every saturate-level comparison.
+#
+# NOT "term", and not match-all/phrase either. Those three are cheap queries whose
+# saturate throughput is bounded by the LOAD GENERATOR, not by the cluster: each
+# permutation drives 64 search clients from 7 vCPU (four permutations share one
+# 32-vCPU loadgen node), and measured across five regions they all pile onto a
+# ~17,400-17,650 ops/s plateau with dips to ~13,000 that MOVE BETWEEN REGIONS for
+# the same instance type (r8a: 13,981/17,328/17,091/13,352/13,762). A quantity
+# that changes by 4x across repetitions of identical silicon is measuring
+# contention on the generator, so it cannot rank CPUs and must not be published
+# as a ceiling.
+#
+# country_agg_uncached is the opposite: expensive per request, so the generator is
+# idle and the cluster is the limit. Its spread within a vendor is 2-5% and it
+# reproduces the achieved throughput from the rate-limited levels to within a few
+# percent, which is what makes it a ceiling rather than an artefact.
+SATURATE_TASK = "country_agg_uncached"
+
 MIN_REPS = 3
 MAX_ERROR_RATE = 0.1  # percent
 
@@ -469,6 +488,19 @@ def main():
                   "queue-dominated at saturation and is deliberately not reported "
                   "— use the fixed-rate levels above for latency.")
                 w("")
+                w(f"> **Only the `{SATURATE_TASK}` column ranks CPUs.** The "
+                  "`match-all`, `term` and `phrase` columns are bounded by the "
+                  "load generator, not by the cluster: every instance type piles "
+                  "onto a ~17,400–17,650 ops/s plateau, and the dips below it move "
+                  "between regions for the same instance type (`r8a` match-all: "
+                  "13,981 / 17,328 / 17,091 / 13,352 / 13,762 across five "
+                  "regions). They are listed for completeness and must not be "
+                  f"quoted as ceilings. `{SATURATE_TASK}` is costly enough per "
+                  "request that the generator stays idle, its within-vendor spread "
+                  "is 2–5%, and it reproduces the achieved throughput of the "
+                  "rate-limited levels — which is why every saturate comparison "
+                  "below uses it.")
+                w("")
                 w("| perm | CPU | cores | " + " | ".join(SEARCH_TASKS)
                   + f" | $/1k ops, term ({ref_region}) |")
                 w("|---|---|--:|" + "--:|" * len(SEARCH_TASKS) + "--:|")
@@ -540,14 +572,14 @@ def main():
             for lk in load_keys:
                 kind = config["load_levels"][lk]["kind"]
                 if kind == "saturate":
-                    gq = agg([g(c["m"], "Mean Throughput", "term") for c in runs[lk][gk]])
-                    aq = agg([g(c["m"], "Mean Throughput", "term") for c in runs[lk][ak]])
+                    gq = agg([g(c["m"], "Mean Throughput", SATURATE_TASK) for c in runs[lk][gk]])
+                    aq = agg([g(c["m"], "Mean Throughput", SATURATE_TASK) for c in runs[lk][ak]])
                     verdict = compare(aq, gq, lower_is_better=False)
                     adj = "—"
                     if gq and aq and separated(gq, aq):
                         perf = (aq["median"] - gq["median"]) / gq["median"] * 100
                         adj = f"{perf - pr:+.1f}%"
-                    w(f"| {fam} | {pair} | `{lk}` | term throughput | "
+                    w(f"| {fam} | {pair} | `{lk}` | {SATURATE_TASK} throughput | "
                       f"{fmt_num(gq,0)} | {fmt_num(aq,0)} | {verdict} | {adj} |")
                 else:
                     gs = agg([service_time(c["m"], "term") for c in runs[lk][gk]])
@@ -594,12 +626,12 @@ def main():
                 # Per region, pick the metric appropriate to the load kind.
                 gvals, avals = {}, {}
                 for c in runs[lk][gk]:
-                    v = (g(c["m"], "Mean Throughput", "term") if kind == "saturate"
+                    v = (g(c["m"], "Mean Throughput", SATURATE_TASK) if kind == "saturate"
                          else service_time(c["m"], "term"))
                     if v:
                         gvals[c["region"]] = v
                 for c in runs[lk][ak]:
-                    v = (g(c["m"], "Mean Throughput", "term") if kind == "saturate"
+                    v = (g(c["m"], "Mean Throughput", SATURATE_TASK) if kind == "saturate"
                          else service_time(c["m"], "term"))
                     if v:
                         avals[c["region"]] = v
