@@ -1,0 +1,1024 @@
+a_version" : "21",
+          "description" : "Plugin for geospatial features in OpenSearch. Registering the geo_shape and aggregations on GeoShape and GeoPoint",
+          "classname" : "org.opensearch.geo.GeoModulePlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [ ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        },
+        {
+          "name" : "ingest-common",
+          "version" : "3.5.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "Module for ingest processors that do not require additional security permissions or have large dependencies and resources",
+          "classname" : "org.opensearch.ingest.common.IngestCommonModulePlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [
+            "lang-painless"
+          ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        },
+        {
+          "name" : "ingest-geoip",
+          "version" : "3.5.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "Ingest processor that uses looksup geo data based on ip adresses using the Maxmind geo database",
+          "classname" : "org.opensearch.ingest.geoip.IngestGeoIpModulePlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [ ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        },
+        {
+          "name" : "ingest-user-agent",
+          "version" : "3.5.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "Ingest processor that extracts information from a user agent",
+          "classname" : "org.opensearch.ingest.useragent.IngestUserAgentModulePlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [ ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        },
+        {
+          "name" : "lang-expression",
+          "version" : "3.5.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "Lucene expressions integration for OpenSearch",
+          "classname" : "org.opensearch.script.expression.ExpressionModulePlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [ ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        },
+        {
+          "name" : "lang-mustache",
+          "version" : "3.5.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "Mustache scripting integration for OpenSearch",
+          "classname" : "org.opensearch.script.mustache.MustacheModulePlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [ ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        },
+        {
+          "name" : "lang-painless",
+          "version" : "3.5.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "An easy, safe and fast scripting language for OpenSearch",
+          "classname" : "org.opensearch.painless.PainlessModulePlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [ ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        },
+        {
+          "name" : "mapper-extras",
+          "version" : "3.5.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "Adds advanced field mappers",
+          "classname" : "org.opensearch.index.mapper.MapperExtrasModulePlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [ ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        },
+        {
+          "name" : "opensearch-dashboards",
+          "version" : "3.5.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "Plugin exposing APIs for OpenSearch Dashboards system indices",
+          "classname" : "org.opensearch.dashboards.OpenSearchDashboardsModulePlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [ ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        },
+        {
+          "name" : "parent-join",
+          "version" : "3.5.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "This module adds the support parent-child queries and aggregations",
+          "classname" : "org.opensearch.join.ParentJoinModulePlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [ ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        },
+        {
+          "name" : "percolator",
+          "version" : "3.5.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "Percolator module adds capability to index queries and query these queries by specifying documents",
+          "classname" : "org.opensearch.percolator.PercolatorModulePlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [ ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        },
+        {
+          "name" : "rank-eval",
+          "version" : "3.5.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "The Rank Eval module adds APIs to evaluate ranking quality.",
+          "classname" : "org.opensearch.index.rankeval.RankEvalModulePlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [ ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        },
+        {
+          "name" : "reindex",
+          "version" : "3.5.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "The Reindex module adds APIs to reindex from one index to another or update documents in place.",
+          "classname" : "org.opensearch.index.reindex.ReindexModulePlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [ ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        },
+        {
+          "name" : "repository-url",
+          "version" : "3.5.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "Module for URL repository",
+          "classname" : "org.opensearch.plugin.repository.url.URLRepositoryModulePlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [ ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        },
+        {
+          "name" : "rule-framework",
+          "version" : "3.5.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "OpenSearch Rule Framework plugin",
+          "classname" : "org.opensearch.rule.RuleFrameworkPlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [ ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        },
+        {
+          "name" : "search-pipeline-common",
+          "version" : "3.5.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "Module for search pipeline processors that do not require additional security permissions or have large dependencies and resources",
+          "classname" : "org.opensearch.search.pipeline.common.SearchPipelineCommonModulePlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [
+            "lang-painless"
+          ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        },
+        {
+          "name" : "store-subdirectory",
+          "version" : "3.5.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "OpenSearch Subdirectory Store plugin",
+          "classname" : "org.opensearch.plugin.store.subdirectory.SubdirectoryStorePlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [ ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        },
+        {
+          "name" : "systemd",
+          "version" : "3.5.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "Integrates OpenSearch with systemd",
+          "classname" : "org.opensearch.systemd.SystemdModulePlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [ ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        },
+        {
+          "name" : "transport-grpc",
+          "version" : "3.5.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "gRPC based transport implementation",
+          "classname" : "org.opensearch.transport.grpc.GrpcPlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [ ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        },
+        {
+          "name" : "transport-netty4",
+          "version" : "3.5.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "Netty 4 based transport implementation",
+          "classname" : "org.opensearch.transport.Netty4ModulePlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [ ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        }
+      ]
+    },
+    "xVfrR3XXT-G6ojLdB_JYhA" : {
+      "name" : "c8a-master-1",
+      "transport_address" : "10.0.3.16:9300",
+      "host" : "10.0.3.16",
+      "ip" : "10.0.3.16",
+      "version" : "3.5.0",
+      "build_type" : "tar",
+      "build_hash" : "bbc94f0bdc3a759011e6529ecfe52840856f91a3",
+      "roles" : [
+        "data",
+        "ingest",
+        "master",
+        "remote_cluster_client"
+      ],
+      "attributes" : {
+        "shard_indexing_pressure_enabled" : "true"
+      },
+      "os" : {
+        "refresh_interval_in_millis" : 1000,
+        "name" : "Linux",
+        "pretty_name" : "Amazon Linux 2023.10.20260302",
+        "arch" : "amd64",
+        "version" : "6.1.182",
+        "available_processors" : 32,
+        "allocated_processors" : 32
+      },
+      "jvm" : {
+        "pid" : 1,
+        "version" : "25.0.2",
+        "vm_name" : "OpenJDK 64-Bit Server VM",
+        "vm_version" : "25.0.2+10-LTS",
+        "vm_vendor" : "Eclipse Adoptium",
+        "bundled_jdk" : true,
+        "using_bundled_jdk" : true,
+        "start_time_in_millis" : 1790141047649,
+        "mem" : {
+          "heap_init_in_bytes" : 27917287424,
+          "heap_max_in_bytes" : 27917287424,
+          "non_heap_init_in_bytes" : 7667712,
+          "non_heap_max_in_bytes" : 0,
+          "direct_max_in_bytes" : 0
+        },
+        "gc_collectors" : [
+          "G1 Young Generation",
+          "G1 Concurrent GC",
+          "G1 Old Generation"
+        ],
+        "memory_pools" : [
+          "CodeHeap 'non-nmethods'",
+          "Metaspace",
+          "CodeHeap 'profiled nmethods'",
+          "Compressed Class Space",
+          "G1 Eden Space",
+          "G1 Old Gen",
+          "G1 Survivor Space",
+          "CodeHeap 'non-profiled nmethods'"
+        ],
+        "using_compressed_ordinary_object_pointers" : "true",
+        "input_arguments" : [
+          "-Xshare:auto",
+          "-Dopensearch.networkaddress.cache.ttl=60",
+          "-Dopensearch.networkaddress.cache.negative.ttl=10",
+          "-XX:+AlwaysPreTouch",
+          "-Xss1m",
+          "-Djava.awt.headless=true",
+          "-Dfile.encoding=UTF-8",
+          "-Djna.nosys=true",
+          "-XX:-OmitStackTraceInFastThrow",
+          "-XX:+ShowCodeDetailsInExceptionMessages",
+          "-Dio.netty.noUnsafe=true",
+          "-Dio.netty.noKeySetOptimization=true",
+          "-Dio.netty.recycler.maxCapacityPerThread=0",
+          "-Dio.netty.allocator.numDirectArenas=0",
+          "-Dlog4j.shutdownHookEnabled=false",
+          "-Dlog4j2.disable.jmx=true",
+          "-Djava.locale.providers=SPI,CLDR",
+          "-Xms1g",
+          "-Xmx1g",
+          "-XX:+UseG1GC",
+          "-XX:G1ReservePercent=25",
+          "-XX:InitiatingHeapOccupancyPercent=30",
+          "-Djava.io.tmpdir=/tmp/opensearch-7989506691545442520",
+          "-XX:+HeapDumpOnOutOfMemoryError",
+          "-XX:HeapDumpPath=data",
+          "-XX:ErrorFile=logs/hs_err_pid%p.log",
+          "-Xlog:gc*,gc+age=trace,safepoint:file=logs/gc.log:utctime,pid,tags:filecount=32,filesize=64m",
+          "--add-modules=jdk.incubator.vector",
+          "-javaagent:agent/opensearch-agent.jar",
+          "--add-opens=java.base/java.nio=org.apache.arrow.memory.core,ALL-UNNAMED",
+          "-Dorg.apache.lucene.store.MMapDirectory.sharedArenaMaxPermits=1",
+          "-XX:+UseCompactObjectHeaders",
+          "-Dclk.tck=100",
+          "-Djdk.attach.allowAttachSelf=true",
+          "-Djava.security.policy=/usr/share/opensearch/config/opensearch-performance-analyzer/opensearch_security.policy",
+          "--add-opens=jdk.attach/sun.tools.attach=ALL-UNNAMED",
+          "-Dopensearch.cgroups.hierarchy.override=/",
+          "-Xms26g",
+          "-Xmx26g",
+          "-XX:MaxDirectMemorySize=13958643712",
+          "-Dopensearch.path.home=/usr/share/opensearch",
+          "-Dopensearch.path.conf=/usr/share/opensearch/config",
+          "-Dopensearch.distribution.type=tar",
+          "-Dopensearch.bundled_jdk=true"
+        ]
+      },
+      "plugins" : [
+        {
+          "name" : "opensearch-alerting",
+          "version" : "3.5.0.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "Amazon OpenSearch alerting plugin",
+          "classname" : "org.opensearch.alerting.AlertingPlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [
+            "lang-painless"
+          ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        },
+        {
+          "name" : "opensearch-anomaly-detection",
+          "version" : "3.5.0.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "OpenSearch anomaly detector plugin",
+          "classname" : "org.opensearch.timeseries.TimeSeriesAnalyticsPlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [
+            "lang-painless",
+            "opensearch-job-scheduler",
+            "opensearch-security"
+          ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [
+            "opensearch-security"
+          ]
+        },
+        {
+          "name" : "opensearch-asynchronous-search",
+          "version" : "3.5.0.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "Provides support for asynchronous search",
+          "classname" : "org.opensearch.search.asynchronous.plugin.AsynchronousSearchPlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [ ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        },
+        {
+          "name" : "opensearch-cross-cluster-replication",
+          "version" : "3.5.0.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "OpenSearch Cross Cluster Replication Plugin",
+          "classname" : "org.opensearch.replication.ReplicationPlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [ ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        },
+        {
+          "name" : "opensearch-custom-codecs",
+          "version" : "3.5.0.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "OpenSearch plugin that implements custom compression codecs",
+          "classname" : "org.opensearch.index.codec.customcodecs.CustomCodecPlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [ ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        },
+        {
+          "name" : "opensearch-flow-framework",
+          "version" : "3.5.0.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "OpenSearch plugin that enables builders to innovate AI apps on OpenSearch",
+          "classname" : "org.opensearch.flowframework.FlowFrameworkPlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [
+            "opensearch-security"
+          ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [
+            "opensearch-security"
+          ]
+        },
+        {
+          "name" : "opensearch-geospatial",
+          "version" : "3.5.0.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "OpenSearch Geospatial plugin to host geospatial features",
+          "classname" : "org.opensearch.geospatial.plugin.GeospatialPlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [
+            "opensearch-job-scheduler"
+          ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        },
+        {
+          "name" : "opensearch-index-management",
+          "version" : "3.5.0.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "OpenSearch Index Management Plugin",
+          "classname" : "org.opensearch.indexmanagement.IndexManagementPlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [
+            "opensearch-job-scheduler"
+          ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        },
+        {
+          "name" : "opensearch-job-scheduler",
+          "version" : "3.5.0.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "OpenSearch Job Scheduler plugin",
+          "classname" : "org.opensearch.jobscheduler.JobSchedulerPlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [ ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        },
+        {
+          "name" : "opensearch-knn",
+          "version" : "3.5.0.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "OpenSearch k-NN plugin",
+          "classname" : "org.opensearch.knn.plugin.KNNPlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [
+            "lang-painless",
+            "transport-grpc"
+          ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        },
+        {
+          "name" : "opensearch-ltr",
+          "version" : "3.5.0.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "Learning to Rank Query w/ RankLib Models",
+          "classname" : "com.o19s.es.ltr.LtrQueryParserPlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [ ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        },
+        {
+          "name" : "opensearch-ml",
+          "version" : "3.5.0.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "machine learning plugin for opensearch",
+          "classname" : "org.opensearch.ml.plugin.MachineLearningPlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [
+            "opensearch-job-scheduler",
+            "opensearch-security"
+          ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [
+            "opensearch-security"
+          ]
+        },
+        {
+          "name" : "opensearch-neural-search",
+          "version" : "3.5.0.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "A plugin that adds dense neural retrieval into the OpenSearch ecosytem",
+          "classname" : "org.opensearch.neuralsearch.plugin.NeuralSearch",
+          "custom_foldername" : "",
+          "extended_plugins" : [
+            "opensearch-knn",
+            "transport-grpc"
+          ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        },
+        {
+          "name" : "opensearch-notifications",
+          "version" : "3.5.0.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "OpenSearch Notifications Plugin",
+          "classname" : "org.opensearch.notifications.NotificationPlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [
+            "opensearch-notifications-core"
+          ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        },
+        {
+          "name" : "opensearch-notifications-core",
+          "version" : "3.5.0.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "OpenSearch Notifications Core Plugin",
+          "classname" : "org.opensearch.notifications.core.NotificationCorePlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [ ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        },
+        {
+          "name" : "opensearch-observability",
+          "version" : "3.5.0.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "OpenSearch Plugin for OpenSearch Dashboards Observability",
+          "classname" : "org.opensearch.observability.ObservabilityPlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [ ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        },
+        {
+          "name" : "opensearch-performance-analyzer",
+          "version" : "3.5.0.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "OpenSearch Performance Analyzer Plugin",
+          "classname" : "org.opensearch.performanceanalyzer.PerformanceAnalyzerPlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [ ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        },
+        {
+          "name" : "opensearch-reports-scheduler",
+          "version" : "3.5.0.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "Scheduler for Dashboards Reports Plugin",
+          "classname" : "org.opensearch.reportsscheduler.ReportsSchedulerPlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [
+            "opensearch-job-scheduler",
+            "opensearch-security"
+          ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [
+            "opensearch-security"
+          ]
+        },
+        {
+          "name" : "opensearch-search-relevance",
+          "version" : "3.5.0.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "opensearch plugin that enables users to fine tuning search based on search relevance judgments",
+          "classname" : "org.opensearch.searchrelevance.plugin.SearchRelevancePlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [
+            "opensearch-job-scheduler"
+          ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        },
+        {
+          "name" : "opensearch-security",
+          "version" : "3.5.0.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "Provide access control related features for OpenSearch",
+          "classname" : "org.opensearch.security.OpenSearchSecurityPlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [
+            "rule-framework",
+            "workload-management",
+            "transport-grpc"
+          ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [
+            "workload-management",
+            "transport-grpc"
+          ]
+        },
+        {
+          "name" : "opensearch-security-analytics",
+          "version" : "3.5.0.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "OpenSearch Security Analytics plugin",
+          "classname" : "org.opensearch.securityanalytics.SecurityAnalyticsPlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [
+            "opensearch-job-scheduler",
+            "opensearch-alerting"
+          ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        },
+        {
+          "name" : "opensearch-skills",
+          "version" : "3.5.0.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "OpenSearch Skills",
+          "classname" : "org.opensearch.agent.ToolPlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [
+            "opensearch-ml"
+          ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        },
+        {
+          "name" : "opensearch-sql",
+          "version" : "3.5.0.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "OpenSearch SQL",
+          "classname" : "org.opensearch.sql.plugin.SQLPlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [
+            "opensearch-job-scheduler"
+          ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        },
+        {
+          "name" : "opensearch-system-templates",
+          "version" : "3.5.0.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "OpenSearch plugin that provides basic application based configuration templates.",
+          "classname" : "org.opensearch.system.applicationtemplates.ApplicationBasedConfigurationSystemTemplatesPlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [ ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        },
+        {
+          "name" : "opensearch-ubi",
+          "version" : "3.5.0.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "OpenSearch User Behavior Insights Plugin",
+          "classname" : "org.opensearch.ubi.UbiPlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [ ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        },
+        {
+          "name" : "query-insights",
+          "version" : "3.5.0.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "OpenSearch Query Insights plugin",
+          "classname" : "org.opensearch.plugin.insights.QueryInsightsPlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [ ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        }
+      ],
+      "modules" : [
+        {
+          "name" : "aggs-matrix-stats",
+          "version" : "3.5.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "Adds aggregations whose input are a list of numeric fields and output includes a matrix.",
+          "classname" : "org.opensearch.search.aggregations.matrix.MatrixAggregationModulePlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [ ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        },
+        {
+          "name" : "analysis-common",
+          "version" : "3.5.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "Adds \"built in\" analyzers to OpenSearch.",
+          "classname" : "org.opensearch.analysis.common.CommonAnalysisModulePlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [
+            "lang-painless"
+          ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        },
+        {
+          "name" : "cache-common",
+          "version" : "3.5.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "Module for caches which are optional and do not require additional security permission",
+          "classname" : "org.opensearch.cache.common.tier.TieredSpilloverCachePlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [ ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        },
+        {
+          "name" : "geo",
+          "version" : "3.5.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "Plugin for geospatial features in OpenSearch. Registering the geo_shape and aggregations on GeoShape and GeoPoint",
+          "classname" : "org.opensearch.geo.GeoModulePlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [ ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        },
+        {
+          "name" : "ingest-common",
+          "version" : "3.5.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "Module for ingest processors that do not require additional security permissions or have large dependencies and resources",
+          "classname" : "org.opensearch.ingest.common.IngestCommonModulePlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [
+            "lang-painless"
+          ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        },
+        {
+          "name" : "ingest-geoip",
+          "version" : "3.5.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "Ingest processor that uses looksup geo data based on ip adresses using the Maxmind geo database",
+          "classname" : "org.opensearch.ingest.geoip.IngestGeoIpModulePlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [ ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        },
+        {
+          "name" : "ingest-user-agent",
+          "version" : "3.5.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "Ingest processor that extracts information from a user agent",
+          "classname" : "org.opensearch.ingest.useragent.IngestUserAgentModulePlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [ ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        },
+        {
+          "name" : "lang-expression",
+          "version" : "3.5.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "Lucene expressions integration for OpenSearch",
+          "classname" : "org.opensearch.script.expression.ExpressionModulePlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [ ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        },
+        {
+          "name" : "lang-mustache",
+          "version" : "3.5.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "Mustache scripting integration for OpenSearch",
+          "classname" : "org.opensearch.script.mustache.MustacheModulePlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [ ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        },
+        {
+          "name" : "lang-painless",
+          "version" : "3.5.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "An easy, safe and fast scripting language for OpenSearch",
+          "classname" : "org.opensearch.painless.PainlessModulePlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [ ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        },
+        {
+          "name" : "mapper-extras",
+          "version" : "3.5.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "Adds advanced field mappers",
+          "classname" : "org.opensearch.index.mapper.MapperExtrasModulePlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [ ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        },
+        {
+          "name" : "opensearch-dashboards",
+          "version" : "3.5.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "Plugin exposing APIs for OpenSearch Dashboards system indices",
+          "classname" : "org.opensearch.dashboards.OpenSearchDashboardsModulePlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [ ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        },
+        {
+          "name" : "parent-join",
+          "version" : "3.5.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "This module adds the support parent-child queries and aggregations",
+          "classname" : "org.opensearch.join.ParentJoinModulePlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [ ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        },
+        {
+          "name" : "percolator",
+          "version" : "3.5.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "Percolator module adds capability to index queries and query these queries by specifying documents",
+          "classname" : "org.opensearch.percolator.PercolatorModulePlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [ ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        },
+        {
+          "name" : "rank-eval",
+          "version" : "3.5.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "The Rank Eval module adds APIs to evaluate ranking quality.",
+          "classname" : "org.opensearch.index.rankeval.RankEvalModulePlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [ ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        },
+        {
+          "name" : "reindex",
+          "version" : "3.5.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "The Reindex module adds APIs to reindex from one index to another or update documents in place.",
+          "classname" : "org.opensearch.index.reindex.ReindexModulePlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [ ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        },
+        {
+          "name" : "repository-url",
+          "version" : "3.5.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "Module for URL repository",
+          "classname" : "org.opensearch.plugin.repository.url.URLRepositoryModulePlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [ ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        },
+        {
+          "name" : "rule-framework",
+          "version" : "3.5.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "OpenSearch Rule Framework plugin",
+          "classname" : "org.opensearch.rule.RuleFrameworkPlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [ ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        },
+        {
+          "name" : "search-pipeline-common",
+          "version" : "3.5.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "Module for search pipeline processors that do not require additional security permissions or have large dependencies and resources",
+          "classname" : "org.opensearch.search.pipeline.common.SearchPipelineCommonModulePlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [
+            "lang-painless"
+          ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        },
+        {
+          "name" : "store-subdirectory",
+          "version" : "3.5.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "OpenSearch Subdirectory Store plugin",
+          "classname" : "org.opensearch.plugin.store.subdirectory.SubdirectoryStorePlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [ ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        },
+        {
+          "name" : "systemd",
+          "version" : "3.5.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "Integrates OpenSearch with systemd",
+          "classname" : "org.opensearch.systemd.SystemdModulePlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [ ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        },
+        {
+          "name" : "transport-grpc",
+          "version" : "3.5.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "gRPC based transport implementation",
+          "classname" : "org.opensearch.transport.grpc.GrpcPlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [ ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        },
+        {
+          "name" : "transport-netty4",
+          "version" : "3.5.0",
+          "opensearch_version" : "3.5.0",
+          "java_version" : "21",
+          "description" : "Netty 4 based transport implementation",
+          "classname" : "org.opensearch.transport.Netty4ModulePlugin",
+          "custom_foldername" : "",
+          "extended_plugins" : [ ],
+          "has_native_controller" : false,
+          "optional_extended_plugins" : [ ]
+        }
+      ]
+    }
+  }
+}
+=== _nodes/settings (vector flags) ===
+(no vector flags reported)
+=== doc count check ===
+index=geonames counted=11396503 expected=11396505
+DOCCOUNT_OK
+DOCCOUNT_DELTA counted=11396503 expected=11396505
+=== cluster health ===
+{
+  "cluster_name" : "c8a",
+  "status" : "green",
+  "timed_out" : false,
+  "number_of_nodes" : 3,
+  "number_of_data_nodes" : 3,
+  "discovered_master" : true,
+  "discovered_cluster_manager" : true,
+  "active_primary_shards" : 5,
+  "active_shards" : 12,
+  "relocating_shards" : 0,
+  "initializing_shards" : 0,
+  "unassigned_shards" : 0,
+  "delayed_unassigned_shards" : 0,
+  "number_of_pending_tasks" : 0,
+  "number_of_in_flight_fetch" : 0,
+  "task_max_waiting_in_queue_millis" : 0,
+  "active_shards_percent_as_number" : 100.0
+}

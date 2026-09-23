@@ -1,0 +1,124 @@
+Metric,Task,Value,Unit
+Cumulative indexing time of primary shards,,8.18965,min
+Min cumulative indexing time across primary shards,,2.61705,min
+Median cumulative indexing time across primary shards,,2.6973166666666666,min
+Max cumulative indexing time across primary shards,,2.8752833333333334,min
+Cumulative indexing throttle time of primary shards,,0,min
+Min cumulative indexing throttle time across primary shards,,0,min
+Median cumulative indexing throttle time across primary shards,,0,min
+Max cumulative indexing throttle time across primary shards,,0,min
+Cumulative merge time of primary shards,,3.5074166666666664,min
+Cumulative merge count of primary shards,,57,
+Min cumulative merge time across primary shards,,0.85875,min
+Median cumulative merge time across primary shards,,1.2357,min
+Max cumulative merge time across primary shards,,1.4129666666666667,min
+Cumulative merge throttle time of primary shards,,1.2249666666666668,min
+Min cumulative merge throttle time across primary shards,,0.2716166666666667,min
+Median cumulative merge throttle time across primary shards,,0.4534333333333333,min
+Max cumulative merge throttle time across primary shards,,0.4999166666666667,min
+Cumulative refresh time of primary shards,,0.4589666666666667,min
+Cumulative refresh count of primary shards,,51,
+Min cumulative refresh time across primary shards,,0.06956666666666668,min
+Median cumulative refresh time across primary shards,,0.15919999999999998,min
+Max cumulative refresh time across primary shards,,0.2302,min
+Cumulative flush time of primary shards,,0.4850333333333333,min
+Cumulative flush count of primary shards,,9,
+Min cumulative flush time across primary shards,,0.07928333333333333,min
+Median cumulative flush time across primary shards,,0.19035,min
+Max cumulative flush time across primary shards,,0.21539999999999998,min
+Total Young Gen GC time,,1.777,s
+Total Young Gen GC count,,138,
+Total Old Gen GC time,,0,s
+Total Old Gen GC count,,0,
+Doc count,,11396503,
+Store size,,5.676865919493139,GB
+Translog size,,3.073364496231079e-07,GB
+Heap used for segments,,0,MB
+Heap used for doc values,,0,MB
+Heap used for terms,,0,MB
+Heap used for norms,,0,MB
+Heap used for points,,0,MB
+Heap used for stored fields,,0,MB
+Segment count,,42,
+error rate,index-append,0.00,%
+Min Throughput,match-all,15822.81,ops/s
+Mean Throughput,match-all,17542.02,ops/s
+Median Throughput,match-all,17953.57,ops/s
+Max Throughput,match-all,18553.48,ops/s
+50th percentile latency,match-all,3335.272638499987,ms
+90th percentile latency,match-all,4616.467282000008,ms
+99th percentile latency,match-all,6229.200339589839,ms
+99.9th percentile latency,match-all,6550.000887102083,ms
+99.99th percentile latency,match-all,6584.182423082449,ms
+100th percentile latency,match-all,6590.913878000038,ms
+50th percentile service time,match-all,1.2960569999904692,ms
+90th percentile service time,match-all,1.7164759000024787,ms
+99th percentile service time,match-all,54.20809650987622,ms
+99.9th percentile service time,match-all,96.45179741508534,ms
+99.99th percentile service time,match-all,175.37734070462423,ms
+100th percentile service time,match-all,224.85506399993938,ms
+error rate,match-all,0.00,%
+Min Throughput,term,12232.71,ops/s
+Mean Throughput,term,13228.36,ops/s
+Median Throughput,term,13202.47,ops/s
+Max Throughput,term,14319.58,ops/s
+50th percentile latency,term,4190.101695499948,ms
+90th percentile latency,term,6858.316593399923,ms
+99th percentile latency,term,7276.211195199962,ms
+99.9th percentile latency,term,7411.933649993077,ms
+99.99th percentile latency,term,7449.384299707663,ms
+100th percentile latency,term,7453.770979000183,ms
+50th percentile service time,term,1.5472390000468295,ms
+90th percentile service time,term,3.6413599999832513,ms
+99th percentile service time,term,62.778201060064056,ms
+99.9th percentile service time,term,83.89983836687446,ms
+99.99th percentile service time,term,165.4159743733678,ms
+100th percentile service time,term,482.459222999978,ms
+error rate,term,0.00,%
+Min Throughput,phrase,12156.51,ops/s
+Mean Throughput,phrase,13804.81,ops/s
+Median Throughput,phrase,13795.23,ops/s
+Max Throughput,phrase,15044.76,ops/s
+50th percentile latency,phrase,3884.1706360000217,ms
+90th percentile latency,phrase,6881.414326100139,ms
+99th percentile latency,phrase,7272.808209970071,ms
+99.9th percentile latency,phrase,7357.9672502109515,ms
+99.99th percentile latency,phrase,7400.994093751815,ms
+100th percentile latency,phrase,7408.747271000038,ms
+50th percentile service time,phrase,1.7404420000275422,ms
+90th percentile service time,phrase,3.57425249994776,ms
+99th percentile service time,phrase,76.65490586989564,ms
+99.9th percentile service time,phrase,93.08015879094165,ms
+99.99th percentile service time,phrase,104.79040351904641,ms
+100th percentile service time,phrase,158.26287599998068,ms
+error rate,phrase,0.00,%
+Min Throughput,country_agg_uncached,164.38,ops/s
+Mean Throughput,country_agg_uncached,165.06,ops/s
+Median Throughput,country_agg_uncached,165.08,ops/s
+Max Throughput,country_agg_uncached,165.55,ops/s
+50th percentile latency,country_agg_uncached,96252.5480365,ms
+90th percentile latency,country_agg_uncached,111482.74969359985,ms
+99th percentile latency,country_agg_uncached,114777.00450581993,ms
+99.9th percentile latency,country_agg_uncached,115186.44263040202,ms
+100th percentile latency,country_agg_uncached,115378.39749900013,ms
+50th percentile service time,country_agg_uncached,381.23859100005575,ms
+90th percentile service time,country_agg_uncached,448.7523610000608,ms
+99th percentile service time,country_agg_uncached,503.63643285988934,ms
+99.9th percentile service time,country_agg_uncached,564.6493226300041,ms
+100th percentile service time,country_agg_uncached,670.8465350000097,ms
+error rate,country_agg_uncached,0.00,%
+Min Throughput,scroll,1719.33,pages/s
+Mean Throughput,scroll,1722.33,pages/s
+Median Throughput,scroll,1722.34,pages/s
+Max Throughput,scroll,1725.62,pages/s
+50th percentile latency,scroll,232628.42811149993,ms
+90th percentile latency,scroll,269068.2034339001,ms
+99th percentile latency,scroll,276587.0196319101,ms
+99.9th percentile latency,scroll,277714.872046681,ms
+100th percentile latency,scroll,278133.47218900005,ms
+50th percentile service time,scroll,869.7833305000131,ms
+90th percentile service time,scroll,1072.2276142000965,ms
+99th percentile service time,scroll,1298.3186912599467,ms
+99.9th percentile service time,scroll,1481.926175572015,ms
+100th percentile service time,scroll,1601.2700439998753,ms
+error rate,scroll,0.00,%

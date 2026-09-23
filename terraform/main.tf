@@ -26,7 +26,14 @@ data "aws_availability_zones" "available" {
 }
 
 locals {
-  azs = slice(data.aws_availability_zones.available.names, 0, 3)
+  # EKS requires subnets in >= 2 AZs, but the benchmark only ever schedules into
+  # var.bench_az. Put that AZ first and guarantee it is present, rather than
+  # hoping it falls inside the first three names the API happens to return.
+  default_azs = slice(data.aws_availability_zones.available.names, 0, 3)
+  azs = var.bench_az == "" ? local.default_azs : distinct(concat(
+    [var.bench_az],
+    slice(data.aws_availability_zones.available.names, 0, 2),
+  ))
 }
 
 ################################################################################
@@ -74,6 +81,16 @@ module "eks" {
     enabled    = true
     node_pools = ["general-purpose", "system"]
   }
+
+  # Do not let the module own /aws/eks/<cluster>/cluster. A destroy that is cut
+  # short (the deadman killing terraform mid-run) can leave the log group behind
+  # with the rest of the stack gone; the next apply in that region then dies on
+  # ResourceAlreadyExistsException before creating anything, which silently cost
+  # two of five regions on the first saturate attempt. Control-plane logs are
+  # not an input to any measurement, so the fix is to stop creating the group
+  # rather than to import or force-delete it on each run.
+  create_cloudwatch_log_group = false
+  cluster_enabled_log_types   = []
 }
 
 ################################################################################

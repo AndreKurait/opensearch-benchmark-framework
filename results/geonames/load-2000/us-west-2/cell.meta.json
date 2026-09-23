@@ -1,0 +1,33 @@
+{
+  "region": "us-west-2",
+  "az": "us-west-2a",
+  "size": "8xlarge",
+  "loadgen_type": "c8i.8xlarge",
+  "rep": "us-west-2",
+  "ebs": {
+    "throughput": 1000,
+    "iops": 16000,
+    "size": "200Gi",
+    "type": "gp3"
+  },
+  "fixed": {
+    "jvm_heap": "26g",
+    "mem_request": "32Gi",
+    "cpu_request": "28",
+    "search_clients": 64,
+    "bulk_indexing_clients": 32,
+    "shards": 3,
+    "replicas": 1
+  },
+  "prices": {
+    "m8g": 1.43616,
+    "m8a": 1.94752,
+    "m8i": 1.69344,
+    "c8g": 1.27616,
+    "c8a": 1.72432,
+    "c8i": 1.49936,
+    "r8g": 1.88512,
+    "r8a": 2.55616,
+    "r8i": 2.22272
+  }
+}

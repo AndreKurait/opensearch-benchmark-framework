@@ -15,3 +15,13 @@ variable "vpc_cidr" {
   type        = string
   default     = "10.0.0.0/16"
 }
+
+# The benchmark pins every node to ONE availability zone, so that zone must have
+# a subnet. Relying on the first three available AZs is not safe: in some regions
+# only a single AZ offers all nine 8th-gen instance types (eu-west-1c), and that
+# AZ is not necessarily among the first three returned.
+variable "bench_az" {
+  description = "Availability zone the benchmark pins all nodes to. Must have a subnet."
+  type        = string
+  default     = ""
+}

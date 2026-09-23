@@ -71,24 +71,51 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: pip install pyyaml
+        run: pip install pyyaml boto3
 
       - name: Python syntax check
-        run: python -m py_compile scripts/generate.py && python -m py_compile scripts/report.py
-
-      - name: Generate manifests (dry run)
-        run: python scripts/generate.py
-
-      - name: Verify generated files exist
         run: |
-          test -f k8s/generated/config.json
-          test -f k8s/generated/storageclasses.yaml
-          test -f k8s/generated/nodepools.yaml
-          test -f k8s/generated/rbac.yaml
-          test -f k8s/generated/osb-jobs-geonames.yaml
-          test -f k8s/generated/osb-jobs-pmc.yaml
-          ls k8s/generated/opensearch/values-*.yaml | wc -l | grep -q 18
-          echo "All 18 permutations generated"
+          for f in scripts/*.py; do python -m py_compile "$f" && echo "ok $f"; done
+
+      # Every benchmark region must generate. A region that fails to generate in
+      # CI would otherwise only be discovered after paying to provision it.
+      - name: Generate manifests for every benchmark region (uses committed specs.json)
+        run: |
+          regions=$(python -c "import json;print(' '.join(r for r,v in json.load(open('specs.json'))['regions'].items() if v['usable_as_repetition']))")
+          test -n "$regions" || { echo "::error::no usable regions in specs.json"; exit 1; }
+          echo "regions: $regions"
+          for rg in $regions; do BENCH_REGION="$rg" python scripts/generate.py; done
+          echo "BENCH_REGIONS=$regions" >> "$GITHUB_ENV"
+
+      - name: Verify generated files exist for every region
+        run: |
+          for rg in $BENCH_REGIONS; do
+            d="k8s/generated/$rg"
+            test -f "$d/config.json"
+            test -f "$d/storageclass.yaml"
+            test -f "$d/nodepools.yaml"
+            test -f "$d/rbac.yaml"
+            test -d "$d/jobs"
+            n=$(ls "$d"/opensearch/values-*.yaml | wc -l)
+            test "$n" -eq 9 || { echo "::error::$rg: expected 9 permutations, got $n"; exit 1; }
+            echo "✓ $rg: 9 permutations"
+          done
+
+      # These are the checks that stop a methodology regression from shipping a
+      # plausible-looking but invalid report. See docs/METHODOLOGY.md.
+      - name: Validate experiment invariants
+        run: python scripts/validate_manifests.py
+
+      - name: Assert no withdrawn claims reintroduced
+        run: |
+          if grep -rn 'Emerald Rapids' README.md docs/ scripts/ 2>/dev/null | grep -v 'UARCH\|withdrawn\|Granite\|previous\|labelled'; then
+            echo "::error::m8i/c8i/r8i are Granite Rapids, not Emerald Rapids"
+            exit 1
+          fi
+          if grep -rnE 'best 8th-gen (EBS-based )?instance family' README.md results/ 2>/dev/null | grep -v withdrawn; then
+            echo "::error::withdrawn headline claim reintroduced without evidence"
+            exit 1
+          fi
 
       - name: Verify no secrets in generated files
         run: |

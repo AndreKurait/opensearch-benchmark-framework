@@ -1,0 +1,9 @@
+=== _nodes jvm/os/plugins ===
+{}
+=== _nodes/settings (vector flags) ===
+(no vector flags reported)
+=== doc count check ===
+index=geonames counted=ERR expected=11396505
+DOCCOUNT_MISMATCH
+=== cluster health ===
+{}
