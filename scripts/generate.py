@@ -72,23 +72,48 @@ LOADGEN_TYPE = os.environ.get("BENCH_LOADGEN_TYPE", "c8i.8xlarge")
 #   - numeric levels  -> compare latency / service time (throughput is pinned)
 #   - "saturate"      -> compare throughput (latency is meaningless here)
 #
-# The saturate level restricts the task list (see SATURATE_TASKS). Running the
-# full 26-task append-no-conflicts procedure unthrottled does not finish: with
-# the rate limit removed the cluster is pegged, and the first observed attempt
-# was still only 31% through task 2 of 26 (node-stats) after 82 minutes, so
-# every region hit the 3h per-cell ceiling and collected zero permutations.
-# The fixed-rate levels complete in 75-105 min precisely BECAUSE the rate cap
-# keeps the cluster below saturation; that headroom is what the stats and
-# heavy-aggregation tasks need in order to make progress.
+# "saturate" is expressed as an ABSURDLY LARGE offered rate, not as an omitted
+# one. This is the single most expensive lesson in this file; two complete
+# multi-region runs produced zero saturate data before it was understood.
+#
+# The original code omitted target_throughput for this level, reasoning that an
+# absent rate cap is the honest way to express "unthrottled". It is not, because
+# geonames/append-no-conflicts is a Jinja template and every task's rate reads:
+#
+#     "target-throughput": {{ <task>_target_throughput
+#                             or target_throughput | default(3) | tojson }}
+#
+# Jinja binds `|` tighter than `or`, so omitting target_throughput does not
+# disable throttling -- it falls through to the WORKLOAD'S OWN DEFAULT, which is
+# 3 ops/s for country_agg_uncached, 0.8 for scroll, 50-110 for the cheap queries
+# and 90 for the stats tasks. The "saturate" level was therefore running up to
+# 100x SLOWER than load-500, which is why it never finished:
+#
+#   * Attempt 1 (full 26 tasks): 31% through node-stats after 82 minutes; every
+#     region hit the 3h per-cell ceiling. 70,400 stats ops at 90 ops/s.
+#   * Attempt 2 (task list trimmed): 50% through country_agg_uncached after 140
+#     minutes. 19,200 aggregations at 3 ops/s is 107 minutes -- a direct match.
+#
+# Both failures looked like "the cluster is pegged and cannot keep up", and that
+# reading is what cost the second run: the symptom of being throttled to 3 ops/s
+# and the symptom of being overwhelmed are identical from the outside (a task
+# that advances slowly), and only the arithmetic distinguishes them. Passing a
+# rate far above anything the cluster can serve is what actually removes the cap,
+# and OSB reports the achieved rate, so the ceiling is what comes back.
+SATURATE_RATE = 1_000_000
+
 LOAD_LEVELS = {
     "load-500": {"target_throughput": 500, "kind": "fixed-rate"},
     "load-2000": {"target_throughput": 2000, "kind": "fixed-rate"},
     "load-8000": {"target_throughput": 8000, "kind": "fixed-rate"},
-    "saturate": {"target_throughput": 0, "kind": "saturate"},
+    "saturate": {"target_throughput": SATURATE_RATE, "kind": "saturate"},
 }
 
 # Tasks DROPPED at the saturate level. Two independent reasons to restrict:
-#   1. Feasibility -- the full procedure cannot complete unthrottled (above).
+#   1. Runtime headroom -- with the throttle actually removed, 26 tasks all
+#      running flat out is feasible but leaves little margin under the 3h
+#      per-cell deadline, and a saturate cell that overruns yields nothing at
+#      all (OSB writes its ConfigMap only on completion).
 #   2. Relevance -- saturate exists to measure a THROUGHPUT ceiling, and only
 #      tasks that actually saturate can express one. index-stats/node-stats are
 #      admin APIs, not search work; the sort/script/painless tasks were never
@@ -104,7 +129,10 @@ LOAD_LEVELS = {
 # pinned to the offered rate at every fixed-rate level, so saturate is the ONLY
 # level where they can discriminate CPUs at all) plus country_agg_uncached and
 # scroll, which already saturate at fixed rates and therefore serve as the
-# cross-check that the unthrottled numbers agree with the throttled ones.
+# CONSISTENCY CHECK: their saturate throughput must land near their load-8000
+# throughput, because they were already at their ceiling there. If it does not,
+# the saturate level is misconfigured -- which is exactly the check that would
+# have caught the omitted-target_throughput defect on the first run.
 SATURATE_EXCLUDE_TASKS = [
     "index-stats",
     "node-stats",
@@ -128,6 +156,7 @@ SATURATE_EXCLUDE_TASKS = [
     "asc_sort_with_after_geonameid",
     "numeric-term-cardinality-agg-high",
 ]
+
 
 # Single storage tier, provisioned to be ACTUALLY ACHIEVABLE at 8xlarge
 # (1250 MB/s EBS baseline). The old default/fast EBS axis was dead weight: the
@@ -555,11 +584,10 @@ def gen_osb_jobs(perms, workload_name, load_key, rep):
             "search_clients": SEARCH_CLIENTS,
             "bulk_indexing_clients": BULK_CLIENTS,
         }
-        # Only set target_throughput for fixed-rate levels. For "saturate" we
-        # omit it entirely rather than passing an absurd number, so that the
-        # OSB log unambiguously shows an unthrottled schedule.
-        if level["kind"] == "fixed-rate":
-            wp["target_throughput"] = level["target_throughput"]
+        # ALWAYS set target_throughput, including at the saturate level. Omitting
+        # it does not mean "unthrottled" -- see the note on SATURATE_RATE. This
+        # unconditional assignment is the fix; do not reintroduce a branch here.
+        wp["target_throughput"] = level["target_throughput"]
         wp_str = ",".join(f"{k}:{v}" for k, v in wp.items())
 
         osb_cmd = (
