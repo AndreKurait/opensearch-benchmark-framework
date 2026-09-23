@@ -26,6 +26,12 @@
 #   bash scripts/launch-remote.sh                      # launch and detach
 #   REGIONS=us-west-2,eu-central-1 bash scripts/launch-remote.sh
 #   DEADMAN_HOURS=8 bash scripts/launch-remote.sh
+#   BENCH_LOADS=saturate bash scripts/launch-remote.sh   # one load level only
+#
+# BENCH_* variables are forwarded to the orchestrator host (see BENCH_ENV below),
+# because generate.py reads its matrix from the environment. Without forwarding,
+# a run launched with BENCH_LOADS=saturate would silently execute all four load
+# levels on the host and there would be no way to tell from the outside.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 ROOT="$PWD"
@@ -35,6 +41,18 @@ INSTANCE_TYPE="${INSTANCE_TYPE:-t3.large}"
 DEADMAN_HOURS="${DEADMAN_HOURS:-7}"
 REGIONS="${REGIONS:-}"                          # empty => auto-detect in run-all.sh
 STACK="osb-bench-orchestrator"
+
+# Forwarded verbatim into the host bootstrap as `export K=V` lines. Only the
+# variables that are actually set are emitted, so an unset BENCH_LOADS leaves
+# generate.py on its own default rather than exporting an empty string (which
+# generate.py would split into a single empty load key and reject).
+BENCH_ENV=""
+for v in BENCH_LOADS BENCH_FAMILIES BENCH_REGIONS_OVERRIDE BENCH_LOADGEN_TYPE MIN_PERMS; do
+  if [[ -n "${!v:-}" ]]; then
+    BENCH_ENV+="export ${v}='${!v}'"$'\n'
+    echo "forwarding ${v}=${!v}"
+  fi
+done
 
 log() { echo; echo "=== $1"; }
 
@@ -205,6 +223,7 @@ echo "/usr/local/bin/osb-deadman" | at now + \${DEADMAN_HOURS} hours
 
 # ---- the run itself
 cd /opt/osb
+${BENCH_ENV}
 REGION_FLAG=""
 [[ -n "\${REGIONS_ARG}" ]] && REGION_FLAG="--regions \${REGIONS_ARG}"
 nohup bash -c "bash scripts/run-all.sh --yes \${REGION_FLAG} > logs/run-all.log 2>&1; \
