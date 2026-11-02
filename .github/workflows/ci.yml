@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   secrets-scan:
     name: Secrets & Credentials Scan
@@ -76,6 +79,9 @@ jobs:
       - name: Python syntax check
         run: python -m py_compile scripts/generate.py && python -m py_compile scripts/report.py
 
+      - name: Offline result-integrity tests
+        run: python -m unittest discover -s tests -v
+
       - name: Generate manifests (dry run)
         run: python scripts/generate.py
 
@@ -87,7 +93,8 @@ jobs:
           test -f k8s/generated/rbac.yaml
           test -f k8s/generated/osb-jobs-geonames.yaml
           test -f k8s/generated/osb-jobs-pmc.yaml
-          ls k8s/generated/opensearch/values-*.yaml | wc -l | grep -q 18
+          files=(k8s/generated/opensearch/values-*.yaml)
+          test "${#files[@]}" -eq 18
           echo "All 18 permutations generated"
 
       - name: Verify no secrets in generated files

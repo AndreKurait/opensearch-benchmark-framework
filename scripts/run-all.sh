@@ -9,14 +9,20 @@ SKIP_INFRA=false
 SKIP_TEARDOWN=false
 WORKLOADS=""
 
-for arg in "$@"; do
-  case $arg in
+while (( $# )); do
+  case "$1" in
     --skip-infra) SKIP_INFRA=true ;;
     --skip-teardown) SKIP_TEARDOWN=true ;;
-    --workloads) shift; WORKLOADS="$1" ;;
-    --workloads=*) WORKLOADS="${arg#*=}" ;;
+    --workloads)
+      [[ $# -ge 2 && "$2" =~ [^[:space:]] && "$2" != --* ]] || { echo "--workloads requires a space-separated list" >&2; exit 1; }
+      shift; WORKLOADS="$1" ;;
+    --workloads=*)
+      WORKLOADS="${1#*=}"
+      [[ "$WORKLOADS" =~ [^[:space:]] ]] || { echo "--workloads requires a space-separated list" >&2; exit 1; } ;;
+    --help|-h) echo 'Usage: bash scripts/run-all.sh [--skip-infra] [--skip-teardown] [--workloads "geonames pmc"]'; exit 0 ;;
+    *) echo "Unknown argument: $1" >&2; exit 1 ;;
   esac
-  shift 2>/dev/null || true
+  shift
 done
 
 # Default workloads from config
@@ -24,6 +30,15 @@ if [[ -z "$WORKLOADS" ]]; then
   python3 scripts/generate.py >/dev/null
   WORKLOADS=$(jq -r '.workloads | keys[]' k8s/generated/config.json)
 fi
+
+for workload in $WORKLOADS; do
+  python3 - "$workload" <<'PY'
+import sys
+from scripts.generate import WORKLOADS
+if sys.argv[1] not in WORKLOADS:
+    raise SystemExit(f"Unknown workload: {sys.argv[1]}")
+PY
+done
 
 START=$(date +%s)
 log() { echo ""; echo "══════════════════════════════════════════════════"; echo "  $1"; echo "══════════════════════════════════════════════════"; }
@@ -63,7 +78,7 @@ done
 log "STEP 5/5: Generating final report"
 python3 scripts/report.py
 echo ""
-cat results/REPORT.md | head -30
+head -30 results/REPORT.md
 echo "..."
 echo ""
 echo "Full report: results/REPORT.md"
