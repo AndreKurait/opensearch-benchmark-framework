@@ -1,3 +1,5 @@
+> **Archived experiment — November 2026. The unfinished multi-region work and its result artifacts are preserved in [PR #1](https://github.com/AndreKurait/opensearch-benchmark-framework/pull/1) and `multi-region-repetitions`. These artifacts do not establish reproducible benchmark results; the provenance limitations below still apply.**
+
 # OpenSearch Benchmark Framework
 
 Automated price-performance benchmarking of OpenSearch on EKS across multiple EC2 instance types and EBS configurations.
