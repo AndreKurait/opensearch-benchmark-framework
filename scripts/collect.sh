@@ -12,8 +12,15 @@ mkdir -p "$DIR"
 
 echo "==> Collecting $WORKLOAD results"
 for pk in $PERMS; do
-  CM="osb-${WORKLOAD}-${pk}"
-  kubectl get cm "$CM" -n default -o jsonpath='{.data.csv}' > "$DIR/${pk}.csv" 2>/dev/null || echo "MISSING" > "$DIR/${pk}.csv"
+  CM="osb-${WORKLOAD//_/-}-${pk}"
+  status=$(kubectl get cm "$CM" -n default -o jsonpath='{.data.exit_code}')
+  [[ "$status" == "0" ]] || { echo "$CM did not record a successful benchmark; refusing to overwrite results" >&2; exit 1; }
+  tmp=$(mktemp "$DIR/.${pk}.XXXXXX")
+  if ! kubectl get cm "$CM" -n default -o jsonpath='{.data.csv}' > "$tmp"; then
+    rm -f "$tmp"
+    exit 1
+  fi
+  mv "$tmp" "$DIR/${pk}.csv"
   kubectl get cm "$CM" -n default -o jsonpath='{.data.log}' > "$DIR/${pk}.log" 2>/dev/null || true
   lines=$(wc -l < "$DIR/${pk}.csv")
   echo "  $pk: $lines lines"

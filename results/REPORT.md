@@ -1,3 +1,5 @@
+> Historical run: raw CSVs and exact run provenance are not included in this repository. The conclusions below are retained as a record and have not been revalidated. See the README for reproducibility requirements.
+
 # OpenSearch 3.5 Benchmark — 8th Gen EC2 Price-Performance
 
 **Generated:** 2026-04-13 15:07 UTC

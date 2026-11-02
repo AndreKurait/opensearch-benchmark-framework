@@ -4,7 +4,7 @@
 Edit INSTANCES, EBS_TIERS, WORKLOADS below to customize.
 Run: python3 scripts/generate.py
 """
-import json, os, shutil
+import json, os, shutil, shlex, textwrap
 from pathlib import Path
 
 import yaml
@@ -50,6 +50,10 @@ def perm_id(inst_key, ebs_key):
 
 def ns_for(perm):
     return f"os-{perm}"
+
+def result_resource_name(workload_name, permutation_name):
+    # OSB workload keys can contain underscores; Kubernetes resource names cannot.
+    return f"osb-{workload_name.replace('_', '-')}-{permutation_name}"
 
 def dump(docs):
     return "---\n".join(yaml.dump(d, default_flow_style=False, sort_keys=False) for d in docs)
@@ -137,29 +141,35 @@ def gen_osb_jobs(perms, workload_name):
     wl = WORKLOADS[workload_name]
     docs = []
     for p in perms:
-        cm_name = f"osb-{workload_name}-{p['name']}"
-        svc = f"opensearch-cluster-master.{p['namespace']}.svc.cluster.local"
+        cm_name = result_resource_name(workload_name, p["name"])
+        svc = f"{p['name']}-master.{p['namespace']}.svc.cluster.local"
         clients = p["search_clients"]
         wp = f"bulk_size:5000,number_of_replicas:1,number_of_shards:3,target_throughput:10000,search_clients:{clients},bulk_indexing_clients:{clients}"
 
-        save_cmd = (
-            "python3 -c \""
-            "import urllib.request,json,os,ssl;"
-            "t=open('/var/run/secrets/kubernetes.io/serviceaccount/token').read();"
-            "ctx=ssl.create_default_context(cafile='/var/run/secrets/kubernetes.io/serviceaccount/ca.crt');"
-            "h=os.environ['KUBERNETES_SERVICE_HOST'];p=os.environ['KUBERNETES_SERVICE_PORT'];"
-            "csv=open('/tmp/r.csv').read() if os.path.exists('/tmp/r.csv') else 'MISSING';"
-            "log=open('/tmp/osb.log').read()[-12000:] if os.path.exists('/tmp/osb.log') else 'MISSING';"
-            f"cm=json.dumps({{'apiVersion':'v1','kind':'ConfigMap','metadata':{{'name':'{cm_name}','namespace':'default','labels':{{'bench':'osb','workload':'{workload_name}'}}}},'data':{{'csv':csv,'log':log}}}}).encode();"
-            "hdrs={'Authorization':f'Bearer {t}','Content-Type':'application/json'};"
-            f"url=f'https://{{h}}:{{p}}/api/v1/namespaces/default/configmaps';"
-            "req=urllib.request.Request(url,data=cm,method='POST',headers=hdrs);"
-            "try: urllib.request.urlopen(req,context=ctx)\n"
-            "except urllib.error.HTTPError:"
-            f" urllib.request.urlopen(urllib.request.Request(url+'/{cm_name}',data=cm,method='PUT',headers=hdrs),context=ctx);"
-            f"print('Saved {cm_name}')"
-            "\""
-        )
+        save_script = textwrap.dedent(f"""\
+            import json, os, ssl, urllib.request, urllib.error
+            from pathlib import Path
+            token = Path('/var/run/secrets/kubernetes.io/serviceaccount/token').read_text()
+            ctx = ssl.create_default_context(cafile='/var/run/secrets/kubernetes.io/serviceaccount/ca.crt')
+            host = os.environ['KUBERNETES_SERVICE_HOST']
+            port = os.environ['KUBERNETES_SERVICE_PORT']
+            csv = Path('/tmp/r.csv').read_text() if Path('/tmp/r.csv').exists() else 'MISSING'
+            log = Path('/tmp/osb.log').read_text()[-12000:] if Path('/tmp/osb.log').exists() else 'MISSING'
+            cm = json.dumps({{'apiVersion': 'v1', 'kind': 'ConfigMap',
+                'metadata': {{'name': {cm_name!r}, 'namespace': 'default',
+                    'labels': {{'bench': 'osb', 'workload': {workload_name!r}}}}},
+                'data': {{'csv': csv, 'log': log, 'exit_code': os.environ['BENCHMARK_EXIT_STATUS']}}}}).encode()
+            headers = {{'Authorization': f'Bearer {{token}}', 'Content-Type': 'application/json'}}
+            url = f'https://{{host}}:{{port}}/api/v1/namespaces/default/configmaps'
+            try:
+                urllib.request.urlopen(urllib.request.Request(url, data=cm, method='POST', headers=headers), context=ctx, timeout=30)
+            except urllib.error.HTTPError as error:
+                if error.code != 409:
+                    raise
+                urllib.request.urlopen(urllib.request.Request(url + '/{cm_name}', data=cm, method='PUT', headers=headers), context=ctx, timeout=30)
+            print('Saved {cm_name}')
+        """)
+        save_cmd = "python3 -c " + shlex.quote(save_script)
 
         cmd = (
             f"opensearch-benchmark run "
@@ -170,26 +180,30 @@ def gen_osb_jobs(perms, workload_name):
             f"--workload-params='{wp}' "
             f"--test-procedure={wl['test_procedure']} "
             f"--client-options='timeout:120' "
-            f"--on-error=continue "
+            f"--on-error=abort "
             f"--results-format=csv "
             f"--results-file=/tmp/r.csv "
-            f"2>&1 | tee /tmp/osb.log; "
-            f"{save_cmd}"
+            f"> /tmp/osb.log 2>&1; "
+            f"BENCHMARK_EXIT_STATUS=$?; export BENCHMARK_EXIT_STATUS; "
+            f"cat /tmp/osb.log; "
+            f"{save_cmd} || exit 1; "
+            'exit "$BENCHMARK_EXIT_STATUS"'
         )
 
         docs.append({
             "apiVersion": "batch/v1", "kind": "Job",
-            "metadata": {"name": f"osb-{workload_name}-{p['name']}", "namespace": "default",
+            "metadata": {"name": cm_name, "namespace": "default",
                          "labels": {"bench": "osb", "workload": workload_name, "perm": p["name"]}},
             "spec": {
-                "backoffLimit": 2, "ttlSecondsAfterFinished": 7200,
+                "backoffLimit": 0, "ttlSecondsAfterFinished": 7200,
+                "activeDeadlineSeconds": 7200,
                 "template": {
                     "metadata": {"labels": {"bench": "osb", "workload": workload_name, "perm": p["name"]},
                                  "annotations": {"karpenter.sh/do-not-disrupt": "true"}},
                     "spec": {
                         "serviceAccountName": "osb-sa",
                         "nodeSelector": {"bench/perm": p["name"]},
-                        "restartPolicy": "OnFailure",
+                        "restartPolicy": "Never",
                         "containers": [{
                             "name": "osb", "image": OSB_IMAGE,
                             "command": ["/bin/sh", "-c"], "args": [cmd],
@@ -221,7 +235,8 @@ def main():
     for wl_name in WORKLOADS:
         (OUT / f"osb-jobs-{wl_name}.yaml").write_text(gen_osb_jobs(perms, wl_name))
 
-    config = {"instances": INSTANCES, "ebs_tiers": EBS_TIERS, "workloads": WORKLOADS,
+    config = {"opensearch_version": OS_VERSION, "benchmark_image": OSB_IMAGE,
+              "instances": INSTANCES, "ebs_tiers": EBS_TIERS, "workloads": WORKLOADS,
               "permutations": [p["name"] for p in perms], "perm_details": perms}
     (OUT / "config.json").write_text(json.dumps(config, indent=2))
 
