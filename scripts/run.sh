@@ -52,8 +52,21 @@ echo "==> $COUNT jobs launched"
 
 # Poll
 START=$SECONDS
+wait_for_next_poll() {
+  local remaining=$(( TIMEOUT_SECONDS - (SECONDS - START) ))
+  (( remaining > 0 )) || return 0
+  (( remaining <= 30 )) || remaining=30
+  sleep "$remaining"
+}
 while (( SECONDS - START < TIMEOUT_SECONDS )); do
-  jobs=$(kubectl get jobs -n default -l "bench=osb,workload=$WORKLOAD" -o json --request-timeout=30s)
+  remaining=$(( TIMEOUT_SECONDS - (SECONDS - START) ))
+  (( remaining > 0 )) || break
+  (( remaining <= 30 )) || remaining=30
+  if ! jobs=$(kubectl get jobs -n default -l "bench=osb,workload=$WORKLOAD" -o json --request-timeout="${remaining}s"); then
+    echo "  Could not fetch Job status; retrying within the existing deadline." >&2
+    wait_for_next_poll
+    continue
+  fi
   failed=$(jq '[.items[] | select(any(.status.conditions[]?; .type == "Failed" and .status == "True"))] | length' <<<"$jobs")
   completed=$(jq '[.items[] | select(any(.status.conditions[]?; .type == "Complete" and .status == "True"))] | length' <<<"$jobs")
   if (( failed > 0 )); then
@@ -65,7 +78,7 @@ while (( SECONDS - START < TIMEOUT_SECONDS )); do
     echo "==> $WORKLOAD complete"
     exit 0
   fi
-  sleep 30
+  wait_for_next_poll
 done
 echo "Timed out waiting for $WORKLOAD after ${TIMEOUT_SECONDS}s. Resources remain for inspection." >&2
 exit 1

@@ -152,6 +152,11 @@ two-hour deadline. `run.sh` checks Job success/failure with a bounded wait rathe
 of a ConfigMap as success. Collection requires the recorded successful exit code. Existing ConfigMaps
 from older runs do not contain this marker and must not be mixed with new results.
 
+Collection stages every permutation before publishing the workload's result directory, so a later
+fetch or exit-status failure leaves the previous results intact. Job-status fetch failures retry
+within the polling deadline. Explicit empty or whitespace-only `--workloads` values are rejected;
+omitting the option still selects the default workloads.
+
 Before launching a workload, `run.sh` waits for previous Jobs for that workload and their pods to stop,
 then requires acknowledged index deletion on every target. Cleanup uses `python3` inside the OpenSearch
 pods; a missing interpreter, HTTP error, or unacknowledged deletion stops the run before new Jobs launch.

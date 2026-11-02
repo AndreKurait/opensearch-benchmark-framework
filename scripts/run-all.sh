@@ -14,9 +14,11 @@ while (( $# )); do
     --skip-infra) SKIP_INFRA=true ;;
     --skip-teardown) SKIP_TEARDOWN=true ;;
     --workloads)
-      [[ $# -ge 2 && -n "$2" && "$2" != --* ]] || { echo "--workloads requires a space-separated list" >&2; exit 1; }
+      [[ $# -ge 2 && "$2" =~ [^[:space:]] && "$2" != --* ]] || { echo "--workloads requires a space-separated list" >&2; exit 1; }
       shift; WORKLOADS="$1" ;;
-    --workloads=*) WORKLOADS="${1#*=}" ;;
+    --workloads=*)
+      WORKLOADS="${1#*=}"
+      [[ "$WORKLOADS" =~ [^[:space:]] ]] || { echo "--workloads requires a space-separated list" >&2; exit 1; } ;;
     --help|-h) echo 'Usage: bash scripts/run-all.sh [--skip-infra] [--skip-teardown] [--workloads "geonames pmc"]'; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; exit 1 ;;
   esac

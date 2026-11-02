@@ -138,7 +138,7 @@ class ShellTests(unittest.TestCase):
         """Copy scripts into a scratch tree; every kubectl invocation is a local stub."""
         scripts = root / "scripts"
         scripts.mkdir()
-        for name in ["run.sh", "collect.sh"]:
+        for name in ["run.sh", "collect.sh", "run-all.sh", "generate.py"]:
             shutil.copyfile(report.ROOT / "scripts" / name, scripts / name)
         (scripts / "report.py").write_text("print('Offline report stub')\n")
         generated = root / "k8s/generated"
@@ -152,6 +152,16 @@ class ShellTests(unittest.TestCase):
         )
         commands = root / "bin"
         commands.mkdir()
+        # Never fall through to real infrastructure tools, even if argument validation regresses.
+        for name in ["terraform", "aws"]:
+            command = commands / name
+            command.write_text("#!/bin/sh\necho 'offline infrastructure sentinel' >&2\nexit 73\n")
+            command.chmod(0o755)
+        sleep = commands / "sleep"
+        sleep.write_text("#!/bin/sh\nexit 0\n")
+        sleep.chmod(0o755)
+        (root / "terraform").mkdir()
+        (root / "terraform/terraform.tfvars.example").write_text("")
         kubectl = commands / "kubectl"
         kubectl.write_text(f"""#!{sys.executable}
 import json, os, sys
@@ -163,14 +173,22 @@ if "exec" in args:
     namespace = args[args.index("-n") + 1]
     sys.exit(1 if namespace == os.environ.get("MOCK_CLEANUP_FAILURE") else 0)
 if args[:2] == ["get", "jobs"]:
+    count = sum(json.loads(line)[:2] == ["get", "jobs"]
+                for line in Path(os.environ["MOCK_COMMAND_LOG"]).read_text().splitlines())
+    failures = os.environ.get("MOCK_JOB_FETCH_FAILURES", "0")
+    if failures == "always" or count <= int(failures):
+        raise SystemExit("temporary API failure")
+    condition = os.environ.get("MOCK_JOB_CONDITION", "Complete")
     print(json.dumps({{"items": [
-        {{"status": {{"conditions": [{{"type": "Complete", "status": "True"}}]}}}},
-        {{"status": {{"conditions": [{{"type": "Complete", "status": "True"}}]}}}}
+        {{"status": {{"conditions": [{{"type": condition, "status": "True"}}]}}}},
+        {{"status": {{"conditions": [{{"type": condition, "status": "True"}}]}}}}
     ]}}))
 elif args[:2] == ["get", "cm"]:
     if args[-1] == "jsonpath={{.data.exit_code}}":
-        print("0", end="")
+        print("1" if args[2] == os.environ.get("MOCK_UNSUCCESSFUL_CM") else "0", end="")
     elif args[-1] == "jsonpath={{.data.csv}}":
+        if args[2] == os.environ.get("MOCK_CSV_FETCH_FAILURE"):
+            raise SystemExit("CSV fetch failed")
         print("Metric,Task,Value,Unit\\nCumulative indexing time of primary shards,,1,min")
     elif args[-1] == "jsonpath={{.data.log}}":
         print("offline test")
@@ -233,6 +251,128 @@ elif args[0] not in ["delete", "apply"]:
             for item in permutations:
                 self.assertTrue((root / "results/nyc_taxis" / f"{item['name']}.csv").is_file())
             self.assertFalse((root / "results/nyc-taxis").exists())
+
+    def test_late_collection_failure_preserves_every_existing_result(self):
+        for failure in ["MOCK_UNSUCCESSFUL_CM", "MOCK_CSV_FETCH_FAILURE"]:
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                env, permutations = self.fixture(root)
+                env[failure] = generate.result_resource_name("geonames", permutations[-1]["name"])
+                results = root / "results/geonames"
+                results.mkdir(parents=True)
+                for item in permutations:
+                    (results / f"{item['name']}.csv").write_text("previous CSV")
+                    (results / f"{item['name']}.log").write_text("previous log")
+                result = subprocess.run(["bash", str(root / "scripts/collect.sh"), "geonames"],
+                                        env=env, capture_output=True, text=True, timeout=10)
+                self.assertNotEqual(result.returncode, 0)
+                for item in permutations:
+                    self.assertEqual((results / f"{item['name']}.csv").read_text(), "previous CSV")
+                    self.assertEqual((results / f"{item['name']}.log").read_text(), "previous log")
+                self.assertNotIn("Offline report stub", result.stdout)
+                self.assertEqual(list((root / "results").glob(".collect.*")), [])
+
+    def test_complete_collection_replaces_all_results_and_preserves_notes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            env, permutations = self.fixture(root)
+            results = root / "results/geonames"
+            results.mkdir(parents=True)
+            (results / "notes.txt").write_text("keep these notes")
+            for item in permutations:
+                (results / f"{item['name']}.csv").write_text("previous CSV")
+            result = subprocess.run(["bash", str(root / "scripts/collect.sh"), "geonames"],
+                                    env=env, capture_output=True, text=True, timeout=10)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            for item in permutations:
+                self.assertIn("Cumulative indexing time", (results / f"{item['name']}.csv").read_text())
+            self.assertEqual((results / "notes.txt").read_text(), "keep these notes")
+            self.assertEqual(list((root / "results").glob(".collect.*")), [])
+
+    def test_failed_directory_publication_restores_original_results(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            env, _ = self.fixture(root)
+            results = root / "results/geonames"
+            results.mkdir(parents=True)
+            (results / "original.csv").write_text("original")
+            real_mv = shutil.which("mv")
+            mock_mv = root / "bin/mv"
+            mock_mv.write_text(f"""#!{sys.executable}
+import subprocess, sys
+if sys.argv[-2].endswith("/next"):
+    raise SystemExit(1)
+raise SystemExit(subprocess.run([{real_mv!r}, *sys.argv[1:]]).returncode)
+""")
+            mock_mv.chmod(0o755)
+            result = subprocess.run(["bash", str(root / "scripts/collect.sh"), "geonames"],
+                                    env=env, capture_output=True, text=True, timeout=10)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual((results / "original.csv").read_text(), "original")
+            self.assertEqual(list(results.iterdir()), [results / "original.csv"])
+            self.assertEqual(list((root / "results").glob(".collect.*")), [])
+
+    def test_explicit_empty_workloads_fail_before_infrastructure(self):
+        cases = [["--workloads="], ["--workloads= \t\n"], ["--workloads", ""], ["--workloads", " \t\n"]]
+        for arguments in cases:
+            with self.subTest(arguments=arguments), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                env, _ = self.fixture(root)
+                result = subprocess.run(["bash", str(root / "scripts/run-all.sh"), *arguments],
+                                        env=env, capture_output=True, text=True, timeout=10)
+                self.assertEqual(result.returncode, 1)
+                self.assertIn("--workloads requires", result.stderr)
+                self.assertNotIn("STEP 1", result.stdout)
+                self.assertNotIn("offline infrastructure sentinel", result.stderr)
+
+    def test_omitted_workloads_still_select_defaults(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            env, _ = self.fixture(root)
+            result = subprocess.run(["bash", str(root / "scripts/run-all.sh")],
+                                    env=env, capture_output=True, text=True, timeout=10)
+            self.assertEqual(result.returncode, 73, result.stderr)
+            self.assertIn("STEP 1", result.stdout)
+            config = json.loads((root / "k8s/generated/config.json").read_text())
+            self.assertEqual(set(config["workloads"]), set(generate.WORKLOADS))
+
+    def test_transient_status_fetch_retries_without_restarting_jobs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            env, _ = self.fixture(root)
+            env["MOCK_JOB_FETCH_FAILURES"] = "1"
+            result = subprocess.run(["bash", str(root / "scripts/run.sh"), "geonames"],
+                                    env=env, capture_output=True, text=True, timeout=10)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            commands = self.commands(root)
+            self.assertEqual(sum(command[:2] == ["get", "jobs"] for command in commands), 2)
+            self.assertEqual(sum(command[0] == "apply" for command in commands), 1)
+            self.assertEqual(sum(command[:2] == ["delete", "jobs"] for command in commands), 1)
+
+    def test_persistent_status_failure_reaches_deadline_without_restart(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            env, _ = self.fixture(root)
+            env.update(MOCK_JOB_FETCH_FAILURES="always", BENCHMARK_TIMEOUT_SECONDS="1")
+            result = subprocess.run(["bash", str(root / "scripts/run.sh"), "geonames"],
+                                    env=env, capture_output=True, text=True, timeout=5)
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("Timed out waiting", result.stderr)
+            commands = self.commands(root)
+            self.assertEqual(sum(command[0] == "apply" for command in commands), 1)
+            polls = [command for command in commands if command[:2] == ["get", "jobs"]]
+            self.assertGreater(len(polls), 0)
+            self.assertTrue(all("--request-timeout=1s" in command for command in polls))
+
+    def test_retry_does_not_hide_a_failed_job(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            env, _ = self.fixture(root)
+            env.update(MOCK_JOB_FETCH_FAILURES="1", MOCK_JOB_CONDITION="Failed")
+            result = subprocess.run(["bash", str(root / "scripts/run.sh"), "geonames"],
+                                    env=env, capture_output=True, text=True, timeout=10)
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("Benchmark failed:", result.stderr)
 
 
 if __name__ == "__main__":
